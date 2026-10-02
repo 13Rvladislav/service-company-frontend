@@ -43,11 +43,18 @@ function LoginPage() {
 
       await login(form);
 
-      navigate("/dashboard", { replace: true });
+      navigate("/dashboard", {
+        replace: true,
+      });
+
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Неверный email или пароль"
-      );
+
+      const message =
+        err.response?.data?.message ||
+        "Неверный email или пароль";
+
+      setError(message);
+
     } finally {
       setLoading(false);
     }
@@ -57,14 +64,21 @@ function LoginPage() {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(135deg,#EEF4FF 0%,#F8FAFC 100%)",
+        background:
+          "linear-gradient(135deg,#EEF4FF 0%,#F8FAFC 100%)",
         display: "flex",
         alignItems: "center",
       }}
     >
       <Container maxWidth="xl">
-        <Grid container spacing={8} alignItems="center">
+        <Grid
+          container
+          spacing={8}
+          alignItems="center"
+        >
+
           <Grid size={{ xs: 12, md: 6 }}>
+
             <Typography
               variant="h2"
               color="primary"
@@ -74,8 +88,12 @@ function LoginPage() {
               Service Company
             </Typography>
 
-            <Typography variant="h4" sx={{ mb: 3 }}>
-              Информационная система сервисной компании
+            <Typography
+              variant="h4"
+              sx={{ mb: 3 }}
+            >
+              Информационная система
+              сервисной компании
             </Typography>
 
             <Typography
@@ -83,12 +101,21 @@ function LoginPage() {
               lineHeight={1.8}
               fontSize="18px"
             >
-              Управление заявками, мастерами, диспетчерами, адресами
-              обслуживания и полным жизненным циклом ремонта газового
+              Управление заявками, мастерами,
+              диспетчерами, адресами
+              обслуживания и полным жизненным
+              циклом ремонта газового
               оборудования.
             </Typography>
 
-            <Box sx={{ mt: 5, display: "flex", gap: 2 }}>
+            <Box
+              sx={{
+                mt: 5,
+                display: "flex",
+                gap: 2,
+              }}
+            >
+
               <Box
                 sx={{
                   p: 2,
@@ -132,19 +159,25 @@ function LoginPage() {
                   Роли пользователей
                 </Typography>
               </Box>
+
             </Box>
           </Grid>
 
           <Grid size={{ xs: 12, md: 6 }}>
+
             <Card
               elevation={10}
               sx={{
                 borderRadius: 5,
-                bgcolor: "rgba(255,255,255,.92)",
-                backdropFilter: "blur(12px)",
+                bgcolor:
+                  "rgba(255,255,255,.92)",
+                backdropFilter:
+                  "blur(12px)",
               }}
             >
+
               <CardContent sx={{ p: 5 }}>
+
                 <Typography
                   variant="h4"
                   align="center"
@@ -159,16 +192,27 @@ function LoginPage() {
                   color="text.secondary"
                   sx={{ mb: 3 }}
                 >
-                  Авторизуйтесь для продолжения работы
+                  Авторизуйтесь для продолжения
+                  работы
                 </Typography>
 
                 {error && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
+                  <Alert
+                    severity="error"
+                    sx={{
+                      mb: 2,
+                      borderRadius: 2,
+                    }}
+                  >
                     {error}
                   </Alert>
                 )}
 
-                <Box component="form" onSubmit={handleSubmit}>
+                <Box
+                  component="form"
+                  onSubmit={handleSubmit}
+                >
+
                   <TextField
                     fullWidth
                     label="Email"
@@ -192,7 +236,8 @@ function LoginPage() {
                   <Box
                     sx={{
                       display: "flex",
-                      justifyContent: "flex-end",
+                      justifyContent:
+                        "flex-end",
                       mt: 1,
                     }}
                   >
@@ -218,7 +263,9 @@ function LoginPage() {
                       fontWeight: "bold",
                     }}
                   >
-                    {loading ? "Вход..." : "Войти"}
+                    {loading
+                      ? "Вход..."
+                      : "Войти"}
                   </Button>
 
                   <Button
@@ -236,9 +283,12 @@ function LoginPage() {
                   >
                     Регистрация
                   </Button>
+
                 </Box>
               </CardContent>
+
             </Card>
+
           </Grid>
         </Grid>
       </Container>

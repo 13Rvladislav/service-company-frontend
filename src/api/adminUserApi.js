@@ -34,6 +34,30 @@ export const getUserCard = async (id) => {
 };
 
 /**
+ * Заблокировать / разблокировать пользователя.
+ *
+ * enabled = false -> блокировка
+ * enabled = true  -> разблокировка
+ */
+export const setUserStatus = async (
+    id,
+    enabled
+) => {
+    const { data } = await axios.patch(
+        `${AUTH_API_URL}/admin/users/${id}/status`,
+        null,
+        {
+            params: {
+                enabled,
+            },
+            withCredentials: true,
+        }
+    );
+
+    return data;
+};
+
+/**
  * Создать клиента.
  */
 export const createClient = async (payload) => {
@@ -65,4 +89,14 @@ export const createEmployee = async (payload) => {
     );
 
     return data;
+};
+
+//Удаление учеток
+export const deleteUser = async (id) => {
+    await axios.delete(
+        `${AUTH_API_URL}/admin/users/${id}`,
+        {
+            withCredentials: true,
+        }
+    );
 };

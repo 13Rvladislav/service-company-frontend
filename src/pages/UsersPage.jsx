@@ -37,6 +37,9 @@ import HomeIcon from "@mui/icons-material/Home";
 import AddIcon from "@mui/icons-material/Add";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
 
@@ -45,8 +48,10 @@ import { getCurrentProfile } from "../api/userApi";
 import {
   getUsersByRole,
   getUserCard,
+  setUserStatus,
   createClient,
   createEmployee,
+  deleteUser,
 } from "../api/adminUserApi";
 
 import {
@@ -140,6 +145,32 @@ export default function UsersPage() {
     useState(false);
 
   const [cardError, setCardError] =
+    useState("");
+
+  /* ========================================================= */
+  /* БЛОКИРОВКА / РАЗБЛОКИРОВКА */
+  /* ========================================================= */
+
+  const [statusLoading, setStatusLoading] =
+    useState(false);
+
+  const [statusError, setStatusError] =
+    useState("");
+
+  /* ========================================================= */
+  /* УДАЛЕНИЕ ПОЛЬЗОВАТЕЛЯ */
+  /* ========================================================= */
+
+  const [deleteOpen, setDeleteOpen] =
+    useState(false);
+
+  const [deleteUserTarget, setDeleteUserTarget] =
+    useState(null);
+
+  const [deleteLoading, setDeleteLoading] =
+    useState(false);
+
+  const [deleteError, setDeleteError] =
     useState("");
 
   /* ========================================================= */
@@ -273,6 +304,7 @@ export default function UsersPage() {
     setCardOpen(true);
     setCardLoading(true);
     setCardError("");
+    setStatusError("");
 
     setSelectedUser(null);
 
@@ -289,8 +321,8 @@ export default function UsersPage() {
       setSelectedUser(data);
 
       /*
-       * Если пользователь клиент —
-       * отдельно получаем человекочитаемый адрес.
+       * Для клиента отдельно
+       * определяем человекочитаемый адрес.
        */
       if (
         data.role === "CLIENT" &&
@@ -316,7 +348,7 @@ export default function UsersPage() {
   };
 
   /* ========================================================= */
-  /* ПОЛУЧЕНИЕ ТЕКСТОВОГО АДРЕСА */
+  /* ПОЛУЧЕНИЕ АДРЕСА */
   /* ========================================================= */
 
   const resolveUserAddress = async (
@@ -405,15 +437,172 @@ export default function UsersPage() {
   /* ========================================================= */
 
   const handleCloseCard = () => {
+    if (statusLoading) {
+      return;
+    }
+
     setCardOpen(false);
+
     setSelectedUser(null);
+
     setCardError("");
+
+    setStatusError("");
 
     setSelectedAddress({
       city: null,
       street: null,
       house: null,
     });
+  };
+
+  /* ========================================================= */
+  /* БЛОКИРОВКА / РАЗБЛОКИРОВКА */
+  /* ========================================================= */
+
+  const handleChangeUserStatus = async () => {
+    if (!selectedUser) {
+      return;
+    }
+
+    setStatusLoading(true);
+    setStatusError("");
+
+    try {
+      /*
+       * Если сейчас enabled=true,
+       * значит блокируем.
+       *
+       * Если enabled=false,
+       * значит разблокируем.
+       */
+      const newEnabled =
+        !selectedUser.enabled;
+
+      const updatedUser =
+        await setUserStatus(
+          selectedUser.id,
+          newEnabled
+        );
+
+      /*
+       * Обновляем карточку.
+       */
+      setSelectedUser((prev) => ({
+        ...prev,
+        enabled:
+          updatedUser.enabled,
+      }));
+
+      /*
+       * Обновляем строку в таблице,
+       * чтобы статус изменился
+       * сразу без перезагрузки.
+       */
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === selectedUser.id
+            ? {
+                ...item,
+                enabled:
+                  updatedUser.enabled,
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error(
+        "Не удалось изменить статус пользователя:",
+        error
+      );
+
+      setStatusError(
+        error?.response?.data?.message ||
+          "Не удалось изменить статус пользователя"
+      );
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  /* ========================================================= */
+  /* УДАЛЕНИЕ — ОТКРЫТИЕ */
+  /* ========================================================= */
+
+  const handleOpenDelete = (item, event) => {
+    /*
+     * Не даём клику по корзине
+     * открыть карточку пользователя.
+     */
+    event.stopPropagation();
+
+    setDeleteUserTarget(item);
+    setDeleteError("");
+    setDeleteOpen(true);
+  };
+
+  /* ========================================================= */
+  /* УДАЛЕНИЕ — ЗАКРЫТИЕ */
+  /* ========================================================= */
+
+  const handleCloseDelete = () => {
+    if (deleteLoading) {
+      return;
+    }
+
+    setDeleteOpen(false);
+    setDeleteUserTarget(null);
+    setDeleteError("");
+  };
+
+  /* ========================================================= */
+  /* УДАЛЕНИЕ ПОЛЬЗОВАТЕЛЯ */
+  /* ========================================================= */
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserTarget) {
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError("");
+
+    try {
+      await deleteUser(deleteUserTarget.id);
+
+      /*
+       * Если удаляемый пользователь
+       * открыт в карточке — закрываем её.
+       */
+      if (
+        selectedUser?.id ===
+        deleteUserTarget.id
+      ) {
+        setCardOpen(false);
+        setSelectedUser(null);
+      }
+
+      setDeleteOpen(false);
+      setDeleteUserTarget(null);
+
+      /*
+       * Обновляем таблицу после удаления.
+       */
+      await loadUsers();
+    } catch (error) {
+      console.error(
+        "Не удалось удалить пользователя:",
+        error
+      );
+
+      setDeleteError(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          "Не удалось удалить пользователя"
+      );
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   /* ========================================================= */
@@ -545,8 +734,8 @@ export default function UsersPage() {
         await loadUsers();
 
         /*
-         * Для клиента окно можно закрыть
-         * автоматически.
+         * Для клиента закрываем окно
+         * после успешного создания.
          */
         setTimeout(() => {
           handleCloseCreate();
@@ -601,7 +790,6 @@ export default function UsersPage() {
        * Сохраняем response,
        * чтобы показать пароль администратору.
        */
-
       setCreatedEmployee(response);
 
       await loadUsers();
@@ -688,7 +876,18 @@ Email: ${createdEmployee.email}
   /* ========================================================= */
 
   if (loading) {
-    return null;
+    return (
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
   }
 
   /* ========================================================= */
@@ -1149,7 +1348,7 @@ Email: ${createdEmployee.email}
                       <Box
                         component="th"
                         sx={{
-                          width: 50,
+                          width: 100,
                         }}
                       />
                     </Box>
@@ -1206,9 +1405,13 @@ Email: ${createdEmployee.email}
                                   borderRadius:
                                     "50%",
                                   bgcolor:
-                                    "#E8F0FE",
+                                    item.enabled
+                                      ? "#E8F0FE"
+                                      : "#F1F5F9",
                                   color:
-                                    "#2563EB",
+                                    item.enabled
+                                      ? "#2563EB"
+                                      : "#64748B",
                                   display:
                                     "flex",
                                   alignItems:
@@ -1294,7 +1497,8 @@ Email: ${createdEmployee.email}
                                   "#475569",
                               }}
                             >
-                              {item.phone}
+                              {item.phone ||
+                                "Не указан"}
                             </Typography>
                           </Box>
 
@@ -1307,6 +1511,13 @@ Email: ${createdEmployee.email}
                             }}
                           >
                             <Chip
+                              icon={
+                                item.enabled ? (
+                                  <LockOpenIcon />
+                                ) : (
+                                  <LockIcon />
+                                )
+                              }
                               label={
                                 item.enabled
                                   ? "Активен"
@@ -1319,45 +1530,94 @@ Email: ${createdEmployee.email}
                                 bgcolor:
                                   item.enabled
                                     ? "#ECFDF5"
-                                    : "#F1F5F9",
+                                    : "#FEF2F2",
                                 color:
                                   item.enabled
                                     ? "#059669"
-                                    : "#64748B",
+                                    : "#DC2626",
+
+                                "& .MuiChip-icon":
+                                  {
+                                    color:
+                                      "inherit",
+                                    fontSize:
+                                      16,
+                                  },
                               }}
                             />
                           </Box>
 
-                          {/* Стрелка */}
+                          {/* Действия */}
                           <Box
                             component="td"
                             sx={{
                               px: 2,
                               py: 2,
-                              textAlign:
-                                "center",
                             }}
                           >
-                            <Typography
-                              sx={{
-                                color:
-                                  "#94A3B8",
-                                fontSize:
-                                  22,
-                                transition:
-                                  "all 0.15s ease",
+                            <Stack
+                              direction="row"
+                              spacing={0.5}
+                              justifyContent="flex-end"
+                              alignItems="center"
+                            >
+                              {/* Удалить */}
+                              <Tooltip title="Удалить пользователя">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={(event) =>
+                                    handleOpenDelete(
+                                      item,
+                                      event
+                                    )
+                                  }
+                                  disabled={
+                                    deleteLoading &&
+                                    deleteUserTarget?.id ===
+                                      item.id
+                                  }
+                                  sx={{
+                                    width: 34,
+                                    height: 34,
 
-                                "tr:hover &":
-                                  {
-                                    color:
-                                      "#2563EB",
+                                    "&:hover": {
+                                      bgcolor: "#FEF2F2",
+                                    },
+                                  }}
+                                >
+                                  {deleteLoading &&
+                                  deleteUserTarget?.id ===
+                                    item.id ? (
+                                    <CircularProgress
+                                      size={18}
+                                      color="error"
+                                    />
+                                  ) : (
+                                    <DeleteOutlineIcon
+                                      fontSize="small"
+                                    />
+                                  )}
+                                </IconButton>
+                              </Tooltip>
+
+                              {/* Открыть карточку */}
+                              <Typography
+                                sx={{
+                                  color: "#94A3B8",
+                                  fontSize: 22,
+                                  transition:
+                                    "transform 0.15s ease",
+                                  "tr:hover &": {
+                                    color: "#2563EB",
                                     transform:
                                       "translateX(3px)",
                                   },
-                              }}
-                            >
-                              →
-                            </Typography>
+                                }}
+                              >
+                                →
+                              </Typography>
+                            </Stack>
                           </Box>
                         </Box>
                       )
@@ -1940,7 +2200,11 @@ Email: ${createdEmployee.email}
 
       <Dialog
         open={cardOpen}
-        onClose={handleCloseCard}
+        onClose={
+          statusLoading
+            ? undefined
+            : handleCloseCard
+        }
         fullWidth
         maxWidth="sm"
       >
@@ -1984,6 +2248,9 @@ Email: ${createdEmployee.email}
               onClick={
                 handleCloseCard
               }
+              disabled={
+                statusLoading
+              }
             >
               <CloseIcon />
             </IconButton>
@@ -2013,6 +2280,13 @@ Email: ${createdEmployee.email}
             </Alert>
           ) : selectedUser ? (
             <Stack spacing={3}>
+              {/* Ошибка блокировки */}
+              {statusError && (
+                <Alert severity="error">
+                  {statusError}
+                </Alert>
+              )}
+
               {/* ================================================= */}
               {/* ШАПКА */}
               {/* ================================================= */}
@@ -2022,9 +2296,13 @@ Email: ${createdEmployee.email}
                   p: 2.5,
                   borderRadius: 3,
                   bgcolor:
-                    "#F8FAFC",
+                    selectedUser.enabled
+                      ? "#F8FAFC"
+                      : "#FEF2F2",
                   border:
-                    "1px solid #E2E8F0",
+                    selectedUser.enabled
+                      ? "1px solid #E2E8F0"
+                      : "1px solid #FECACA",
                 }}
               >
                 <Stack
@@ -2039,9 +2317,13 @@ Email: ${createdEmployee.email}
                       borderRadius:
                         "50%",
                       bgcolor:
-                        "#E8F0FE",
+                        selectedUser.enabled
+                          ? "#E8F0FE"
+                          : "#FEE2E2",
                       color:
-                        "#2563EB",
+                        selectedUser.enabled
+                          ? "#2563EB"
+                          : "#DC2626",
                       display:
                         "flex",
                       alignItems:
@@ -2051,11 +2333,19 @@ Email: ${createdEmployee.email}
                       flexShrink: 0,
                     }}
                   >
-                    <PersonIcon
-                      sx={{
-                        fontSize: 32,
-                      }}
-                    />
+                    {selectedUser.enabled ? (
+                      <PersonIcon
+                        sx={{
+                          fontSize: 32,
+                        }}
+                      />
+                    ) : (
+                      <LockIcon
+                        sx={{
+                          fontSize: 30,
+                        }}
+                      />
+                    )}
                   </Box>
 
                   <Box
@@ -2090,24 +2380,64 @@ Email: ${createdEmployee.email}
                       </Typography>
                     )}
 
-                    <Chip
-                      label={
-                        roleLabels[
-                          selectedUser
-                            .role
-                        ] ||
-                        selectedUser.role
-                      }
-                      size="small"
-                      sx={{
-                        mt: 1,
-                        bgcolor:
-                          "#EEF2FF",
-                        color:
-                          "#2563EB",
-                        fontWeight: 600,
-                      }}
-                    />
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ mt: 1 }}
+                    >
+                      <Chip
+                        label={
+                          roleLabels[
+                            selectedUser
+                              .role
+                          ] ||
+                          selectedUser.role
+                        }
+                        size="small"
+                        sx={{
+                          bgcolor:
+                            "#EEF2FF",
+                          color:
+                            "#2563EB",
+                          fontWeight: 600,
+                        }}
+                      />
+
+                      <Chip
+                        label={
+                          selectedUser.enabled
+                            ? "Активен"
+                            : "Заблокирован"
+                        }
+                        size="small"
+                        icon={
+                          selectedUser.enabled ? (
+                            <LockOpenIcon />
+                          ) : (
+                            <LockIcon />
+                          )
+                        }
+                        sx={{
+                          bgcolor:
+                            selectedUser.enabled
+                              ? "#ECFDF5"
+                              : "#FEF2F2",
+                          color:
+                            selectedUser.enabled
+                              ? "#059669"
+                              : "#DC2626",
+                          fontWeight: 600,
+
+                          "& .MuiChip-icon":
+                            {
+                              color:
+                                "inherit",
+                              fontSize:
+                                16,
+                            },
+                        }}
+                      />
+                    </Stack>
                   </Box>
                 </Stack>
               </Box>
@@ -2465,16 +2795,230 @@ Email: ${createdEmployee.email}
 
         <Divider />
 
+        {/* =================================================== */}
+        {/* КНОПКИ КАРТОЧКИ */}
+        {/* =================================================== */}
+
         <DialogActions
-          sx={{ p: 2 }}
+          sx={{
+            p: 2,
+            gap: 1,
+          }}
         >
           <Button
             onClick={
               handleCloseCard
             }
             variant="outlined"
+            disabled={
+              statusLoading
+            }
           >
             Закрыть
+          </Button>
+
+          {selectedUser && (
+            <Button
+              onClick={
+                handleChangeUserStatus
+              }
+              variant={
+                selectedUser.enabled
+                  ? "outlined"
+                  : "contained"
+              }
+              color={
+                selectedUser.enabled
+                  ? "error"
+                  : "success"
+              }
+              disabled={
+                statusLoading
+              }
+              startIcon={
+                statusLoading ? (
+                  <CircularProgress
+                    size={18}
+                    color="inherit"
+                  />
+                ) : selectedUser.enabled ? (
+                  <LockIcon />
+                ) : (
+                  <LockOpenIcon />
+                )
+              }
+            >
+              {statusLoading
+                ? "Сохранение..."
+                : selectedUser.enabled
+                  ? "Заблокировать"
+                  : "Разблокировать"}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* =================================================== */}
+      {/* ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ */}
+      {/* =================================================== */}
+
+      <Dialog
+        open={deleteOpen}
+        onClose={handleCloseDelete}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle
+          sx={{
+            px: 3,
+            pt: 3,
+            pb: 1.5,
+          }}
+        >
+          <Stack
+            direction="row"
+            spacing={1.5}
+            alignItems="center"
+          >
+            <Box
+              sx={{
+                width: 42,
+                height: 42,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                bgcolor: "#FEF2F2",
+                color: "#DC2626",
+              }}
+            >
+              <DeleteOutlineIcon />
+            </Box>
+
+            <Typography
+              variant="h6"
+              fontWeight={700}
+            >
+              Удалить пользователя?
+            </Typography>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent
+          sx={{
+            px: 3,
+            py: 2,
+          }}
+        >
+          {deleteUserTarget && (
+            <Box>
+              <Typography
+                variant="body1"
+                sx={{
+                  color: "#334155",
+                  mb: 1.5,
+                }}
+              >
+                Вы действительно хотите удалить
+                пользователя:
+              </Typography>
+
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  bgcolor: "#F8FAFC",
+                  border: "1px solid #E2E8F0",
+                  mb: 2,
+                }}
+              >
+                <Typography
+                  fontWeight={700}
+                  sx={{
+                    color: "#172033",
+                  }}
+                >
+                  {deleteUserTarget.lastName}{" "}
+                  {deleteUserTarget.firstName}
+                  {deleteUserTarget.middleName
+                    ? ` ${deleteUserTarget.middleName}`
+                    : ""}
+                </Typography>
+
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  {deleteUserTarget.email}
+                </Typography>
+
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{
+                    mt: 0.5,
+                    display: "block",
+                  }}
+                >
+                  {roleLabels[
+                    deleteUserTarget.role
+                  ] || deleteUserTarget.role}
+                </Typography>
+              </Box>
+
+              <Alert severity="warning">
+                Это действие нельзя отменить. Учетная
+                запись и профиль пользователя будут
+                удалены.
+              </Alert>
+
+              {deleteError && (
+                <Alert
+                  severity="error"
+                  sx={{ mt: 2 }}
+                >
+                  {deleteError}
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: 3,
+            pb: 3,
+            pt: 1,
+          }}
+        >
+          <Button
+            onClick={handleCloseDelete}
+            variant="outlined"
+            disabled={deleteLoading}
+          >
+            Отмена
+          </Button>
+
+          <Button
+            onClick={handleDeleteUser}
+            variant="contained"
+            color="error"
+            disabled={deleteLoading}
+            startIcon={
+              deleteLoading ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                />
+              ) : (
+                <DeleteOutlineIcon />
+              )
+            }
+          >
+            {deleteLoading
+              ? "Удаление..."
+              : "Удалить"}
           </Button>
         </DialogActions>
       </Dialog>
