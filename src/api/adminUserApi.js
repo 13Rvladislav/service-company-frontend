@@ -100,3 +100,15 @@ export const deleteUser = async (id) => {
         }
     );
 };
+
+export const updateUser = async (id, payload) => {
+    const { data } = await axios.put(
+        `${AUTH_API_URL}/admin/users/${id}`,
+        payload,
+        {
+            withCredentials: true,
+        }
+    );
+
+    return data;
+};

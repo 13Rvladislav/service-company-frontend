@@ -17,6 +17,10 @@ import {
   IconButton,
   Stack,
   TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -39,6 +43,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
@@ -52,6 +57,7 @@ import {
   createClient,
   createEmployee,
   deleteUser,
+  updateUser,
 } from "../api/adminUserApi";
 
 import {
@@ -172,6 +178,36 @@ export default function UsersPage() {
 
   const [deleteError, setDeleteError] =
     useState("");
+
+  /* ========================================================= */
+  /* РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ */
+  /* ========================================================= */
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    middleName: "",
+    email: "",
+    phone: "",
+    cityId: "",
+    streetId: "",
+    houseId: "",
+    apartment: "",
+    employeeNumber: "",
+    specialization: "",
+    zoneId: "",
+    status: "",
+    department: "",
+    position: "",
+  });
+
+  const [editCities, setEditCities] = useState([]);
+  const [editStreets, setEditStreets] = useState([]);
+  const [editHouses, setEditHouses] = useState([]);
+  const [editAddressLoading, setEditAddressLoading] = useState(false);
 
   /* ========================================================= */
   /* АДРЕС */
@@ -602,6 +638,198 @@ export default function UsersPage() {
       );
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  /* ========================================================= */
+  /* РЕДАКТИРОВАНИЕ — ОТКРЫТИЕ */
+  /* ========================================================= */
+
+  const handleOpenEdit = async () => {
+    if (!selectedUser) return;
+
+    setEditError("");
+    setEditForm({
+      firstName: selectedUser.firstName || "",
+      lastName: selectedUser.lastName || "",
+      middleName: selectedUser.middleName || "",
+      email: selectedUser.email || "",
+      phone: selectedUser.phone || "",
+      cityId: selectedUser.cityId || "",
+      streetId: selectedUser.streetId || "",
+      houseId: selectedUser.houseId || "",
+      apartment: selectedUser.apartment || "",
+      employeeNumber: selectedUser.employeeNumber || "",
+      specialization: selectedUser.specialization || "",
+      zoneId: selectedUser.zoneId || "",
+      status: selectedUser.status || "",
+      department: selectedUser.department || "",
+      position: selectedUser.position || "",
+    });
+
+    setEditOpen(true);
+
+    if (selectedUser.role !== "CLIENT") return;
+
+    setEditAddressLoading(true);
+    try {
+      const cities = await getAllCities();
+      setEditCities(cities || []);
+
+      if (selectedUser.cityId) {
+        const streets = await getStreetsByCity(selectedUser.cityId);
+        setEditStreets(streets || []);
+      } else {
+        setEditStreets([]);
+      }
+
+      if (selectedUser.streetId) {
+        const houses = await getHousesByStreet(selectedUser.streetId);
+        setEditHouses(houses || []);
+      } else {
+        setEditHouses([]);
+      }
+    } catch (error) {
+      console.error("Не удалось загрузить адрес для редактирования:", error);
+      setEditError("Не удалось загрузить список адресов");
+    } finally {
+      setEditAddressLoading(false);
+    }
+  };
+
+  const handleEditCityChange = async (event) => {
+    const cityId = event.target.value;
+    setEditForm((prev) => ({ ...prev, cityId, streetId: "", houseId: "" }));
+    setEditStreets([]);
+    setEditHouses([]);
+    if (!cityId) return;
+
+    try {
+      setEditAddressLoading(true);
+      const streets = await getStreetsByCity(cityId);
+      setEditStreets(streets || []);
+    } catch (error) {
+      console.error("Не удалось загрузить улицы:", error);
+      setEditError("Не удалось загрузить улицы выбранного города");
+    } finally {
+      setEditAddressLoading(false);
+    }
+  };
+
+  const handleEditStreetChange = async (event) => {
+    const streetId = event.target.value;
+    setEditForm((prev) => ({ ...prev, streetId, houseId: "" }));
+    setEditHouses([]);
+    if (!streetId) return;
+
+    try {
+      setEditAddressLoading(true);
+      const houses = await getHousesByStreet(streetId);
+      setEditHouses(houses || []);
+    } catch (error) {
+      console.error("Не удалось загрузить дома:", error);
+      setEditError("Не удалось загрузить дома выбранной улицы");
+    } finally {
+      setEditAddressLoading(false);
+    }
+  };
+
+  const handleCloseEdit = () => {
+    if (editLoading) return;
+    setEditOpen(false);
+    setEditError("");
+  };
+
+  const handleEditChange = (field) => (event) => {
+    setEditForm((prev) => ({
+      ...prev,
+      [field]: event.target.value,
+    }));
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+
+    setEditLoading(true);
+    setEditError("");
+
+    try {
+      const updated = await updateUser(selectedUser.id, {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        middleName: editForm.middleName,
+        email: editForm.email,
+        phone: editForm.phone,
+        houseId: selectedUser.role === "CLIENT"
+          ? editForm.houseId || null
+          : null,
+        apartment: selectedUser.role === "CLIENT"
+          ? editForm.apartment
+          : null,
+        employeeNumber: selectedUser.role !== "CLIENT"
+          ? editForm.employeeNumber
+          : null,
+        specialization: selectedUser.role === "ENGINEER"
+          ? editForm.specialization
+          : null,
+        zoneId: selectedUser.role === "ENGINEER"
+          ? editForm.zoneId || null
+          : null,
+        status: selectedUser.role === "ENGINEER"
+          ? editForm.status
+          : null,
+        department: ["DISPATCHER", "ADMIN"].includes(selectedUser.role)
+          ? editForm.department
+          : null,
+        position: selectedUser.role === "ADMIN"
+          ? editForm.position
+          : null,
+      });
+
+      setSelectedUser(updated);
+
+      // После изменения клиента заново загружаем
+      // человекочитаемый адрес для карточки.
+      if (
+        updated.role === "CLIENT" &&
+        updated.cityId &&
+        updated.streetId &&
+        updated.houseId
+      ) {
+        await resolveUserAddress(updated);
+      } else {
+        setSelectedAddress({
+          city: null,
+          street: null,
+          house: null,
+        });
+      }
+
+      setUsers((prev) =>
+        prev.map((item) =>
+          item.id === updated.id
+            ? {
+                ...item,
+                firstName: updated.firstName,
+                lastName: updated.lastName,
+                middleName: updated.middleName,
+                email: updated.email,
+                phone: updated.phone,
+              }
+            : item
+        )
+      );
+
+      setEditOpen(false);
+    } catch (error) {
+      console.error("Не удалось обновить пользователя:", error);
+      setEditError(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          "Не удалось обновить пользователя"
+      );
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -2805,6 +3033,17 @@ Email: ${createdEmployee.email}
             gap: 1,
           }}
         >
+          {selectedUser && (
+            <Button
+              onClick={handleOpenEdit}
+              variant="outlined"
+              startIcon={<EditIcon />}
+              disabled={statusLoading || editLoading}
+            >
+              Редактировать
+            </Button>
+          )}
+
           <Button
             onClick={
               handleCloseCard
@@ -2855,6 +3094,147 @@ Email: ${createdEmployee.email}
                   : "Разблокировать"}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* =================================================== */}
+      {/* РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ */}
+      {/* =================================================== */}
+
+      <Dialog
+        open={editOpen}
+        onClose={handleCloseEdit}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Редактирование пользователя</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {editError && <Alert severity="error">{editError}</Alert>}
+
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth required label="Фамилия" value={editForm.lastName} onChange={handleEditChange("lastName")} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth required label="Имя" value={editForm.firstName} onChange={handleEditChange("firstName")} />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField fullWidth label="Отчество" value={editForm.middleName} onChange={handleEditChange("middleName")} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth required type="email" label="Email" value={editForm.email} onChange={handleEditChange("email")} />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField fullWidth required label="Телефон" value={editForm.phone} onChange={handleEditChange("phone")} />
+              </Grid>
+
+              {selectedUser?.role === "CLIENT" && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="subtitle1" fontWeight={700} sx={{ color: "#172033", mt: 1 }}>
+                      Адрес проживания
+                    </Typography>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <FormControl fullWidth disabled={editAddressLoading}>
+                      <InputLabel id="edit-city-label">Город</InputLabel>
+                      <Select labelId="edit-city-label" value={editForm.cityId} label="Город" onChange={handleEditCityChange}>
+                        <MenuItem value="">Не выбран</MenuItem>
+                        {editCities.map((city) => (
+                          <MenuItem key={city.id} value={city.id}>{city.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <FormControl fullWidth disabled={!editForm.cityId || editAddressLoading}>
+                      <InputLabel id="edit-street-label">Улица</InputLabel>
+                      <Select labelId="edit-street-label" value={editForm.streetId} label="Улица" onChange={handleEditStreetChange}>
+                        <MenuItem value="">Не выбрана</MenuItem>
+                        {editStreets.map((street) => (
+                          <MenuItem key={street.id} value={street.id}>{street.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <FormControl fullWidth disabled={!editForm.streetId || editAddressLoading}>
+                      <InputLabel id="edit-house-label">Дом</InputLabel>
+                      <Select labelId="edit-house-label" value={editForm.houseId} label="Дом" onChange={handleEditChange("houseId")}>
+                        <MenuItem value="">Не выбран</MenuItem>
+                        {editHouses.map((house) => (
+                          <MenuItem key={house.id} value={house.id}>{house.number}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth label="Квартира" value={editForm.apartment} onChange={handleEditChange("apartment")} />
+                  </Grid>
+                </>
+              )}
+
+              {selectedUser?.role === "ENGINEER" && (
+                <>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField fullWidth required label="Статус мастера" value={editForm.status} onChange={handleEditChange("status")} helperText="AVAILABLE / BUSY / OFFLINE" />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth required label="Специализация" value={editForm.specialization} onChange={handleEditChange("specialization")} />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth label="ID зоны" value={editForm.zoneId} onChange={handleEditChange("zoneId")} helperText="Необязательно" />
+                  </Grid>
+                </>
+              )}
+
+              {selectedUser?.role === "DISPATCHER" && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth required label="Отдел" value={editForm.department} onChange={handleEditChange("department")} />
+                  </Grid>
+                </>
+              )}
+
+              {selectedUser?.role === "ADMIN" && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth required label="Должность" value={editForm.position} onChange={handleEditChange("position")} />
+                  </Grid>
+                  <Grid size={{ xs: 12 }}>
+                    <TextField fullWidth label="Отдел" value={editForm.department} onChange={handleEditChange("department")} />
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, gap: 1 }}>
+          <Button onClick={handleCloseEdit} variant="outlined" disabled={editLoading}>
+            Отмена
+          </Button>
+          <Button
+            onClick={handleUpdateUser}
+            variant="contained"
+            disabled={editLoading}
+            startIcon={editLoading ? <CircularProgress size={18} color="inherit" /> : <EditIcon />}
+          >
+            {editLoading ? "Сохранение..." : "Сохранить"}
+          </Button>
         </DialogActions>
       </Dialog>
 
