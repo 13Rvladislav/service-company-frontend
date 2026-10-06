@@ -1,23 +1,70 @@
 import { Box } from "@mui/material";
-import Header from "./Header";
-import Sidebar from "./Sidebar";
 
-function MainLayout({ user, children }) {
+import Sidebar from "./Sidebar";
+import Header from "./Header";
+
+export default function MainLayout({ user, children }) {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F4F7FB" }}>
-      {/* Левое меню */}
+    <Box
+      sx={{
+        minHeight: "100vh",
+        backgroundColor: "#F5F7FB",
+      }}
+    >
+      {/* ===================================================== */}
+      {/* SIDEBAR                                                */}
+      {/* ===================================================== */}
+
       <Sidebar user={user} />
 
-      {/* Правая часть */}
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
+      {/* ===================================================== */}
+      {/* ОСНОВНАЯ ОБЛАСТЬ                                      */}
+      {/* ===================================================== */}
+
+      <Box
+        sx={{
+          marginLeft: "220px",
+          minHeight: "100vh",
+
+          display: "flex",
+          flexDirection: "column",
+
+          width: "calc(100% - 220px)",
+        }}
+      >
+        {/* =================================================== */}
+        {/* HEADER                                              */}
+        {/* =================================================== */}
+
         <Header user={user} />
 
-        <Box sx={{ flexGrow: 1, p: 4 }}>
+        {/* =================================================== */}
+        {/* CONTENT                                             */}
+        {/* =================================================== */}
+
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+
+            width: "100%",
+            boxSizing: "border-box",
+
+            px: {
+              xs: 2,
+              sm: 3,
+              md: 4,
+            },
+
+            py: {
+              xs: 2,
+              sm: 3,
+            },
+          }}
+        >
           {children}
         </Box>
       </Box>
     </Box>
   );
 }
-
-export default MainLayout;

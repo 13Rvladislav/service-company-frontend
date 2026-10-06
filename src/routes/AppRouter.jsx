@@ -9,6 +9,8 @@ import ProfilePage from "../pages/ProfilePage";
 import AddressesPage from "../pages/AddressesPage";
 import ZonesPage from "../pages/ZonesPage";
 import UsersPage from "../pages/UsersPage";
+import EquipmentTypesPage from "../pages/EquipmentTypesPage";
+import EquipmentPage from "../pages/EquipmentPage";
 
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -48,6 +50,17 @@ export default function AppRouter() {
           <Route
             path="/users"
             element={<UsersPage />}
+          />
+
+          {/* Оборудование */}
+          <Route
+            path="/equipment/types"
+            element={<EquipmentTypesPage />}
+          />
+
+          <Route
+            path="/equipment"
+            element={<EquipmentPage />}
           />
 
         </Route>
