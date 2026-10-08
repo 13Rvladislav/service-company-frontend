@@ -38,10 +38,7 @@ export const createEquipmentType = async (payload) => {
   return data;
 };
 
-export const updateEquipmentType = async (
-  id,
-  payload
-) => {
+export const updateEquipmentType = async (id, payload) => {
   const { data } = await axios.put(
     `${EQUIPMENT_API_URL}/types/${id}`,
     payload,
@@ -80,9 +77,7 @@ export const getEquipmentCatalogItem = async (id) => {
   return data;
 };
 
-export const createEquipmentCatalogItem = async (
-  payload
-) => {
+export const createEquipmentCatalogItem = async (payload) => {
   const { data } = await axios.post(
     `${EQUIPMENT_API_URL}/catalog`,
     payload,
@@ -92,10 +87,7 @@ export const createEquipmentCatalogItem = async (
   return data;
 };
 
-export const updateEquipmentCatalogItem = async (
-  id,
-  payload
-) => {
+export const updateEquipmentCatalogItem = async (id, payload) => {
   const { data } = await axios.put(
     `${EQUIPMENT_API_URL}/catalog/${id}`,
     payload,
@@ -105,11 +97,58 @@ export const updateEquipmentCatalogItem = async (
   return data;
 };
 
-export const deleteEquipmentCatalogItem = async (
-  id
-) => {
+export const deleteEquipmentCatalogItem = async (id) => {
   await axios.delete(
     `${EQUIPMENT_API_URL}/catalog/${id}`,
+    apiConfig
+  );
+};
+
+/* ========================================================= */
+/* МОЁ ОБОРУДОВАНИЕ                                         */
+/* ========================================================= */
+
+export const getMyEquipment = async () => {
+  const { data } = await axios.get(
+    `${EQUIPMENT_API_URL}/my`,
+    apiConfig
+  );
+
+  return data;
+};
+
+export const getMyEquipmentItem = async (id) => {
+  const { data } = await axios.get(
+    `${EQUIPMENT_API_URL}/my/${id}`,
+    apiConfig
+  );
+
+  return data;
+};
+
+export const createMyEquipment = async (payload) => {
+  const { data } = await axios.post(
+    `${EQUIPMENT_API_URL}/my`,
+    payload,
+    apiConfig
+  );
+
+  return data;
+};
+
+export const updateMyEquipment = async (id, payload) => {
+  const { data } = await axios.put(
+    `${EQUIPMENT_API_URL}/my/${id}`,
+    payload,
+    apiConfig
+  );
+
+  return data;
+};
+
+export const deleteMyEquipment = async (id) => {
+  await axios.delete(
+    `${EQUIPMENT_API_URL}/my/${id}`,
     apiConfig
   );
 };

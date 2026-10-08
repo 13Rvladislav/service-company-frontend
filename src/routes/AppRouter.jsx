@@ -1,4 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
@@ -9,23 +14,48 @@ import ProfilePage from "../pages/ProfilePage";
 import AddressesPage from "../pages/AddressesPage";
 import ZonesPage from "../pages/ZonesPage";
 import UsersPage from "../pages/UsersPage";
+
 import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
+import MyEquipmentPage from "../pages/MyEquipmentPage";
 
 import ProtectedRoute from "./ProtectedRoute";
+
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Публичные страницы */}
-        <Route path="/" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        {/* ===================================================== */}
+        {/* ПУБЛИЧНЫЕ СТРАНИЦЫ                                   */}
+        {/* ===================================================== */}
 
-        {/* Защищённые страницы */}
+        <Route
+          path="/"
+          element={<LoginPage />}
+        />
+
+        <Route
+          path="/register"
+          element={<RegisterPage />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+
+
+        {/* ===================================================== */}
+        {/* ЗАЩИЩЁННЫЕ СТРАНИЦЫ                                  */}
+        {/* ===================================================== */}
+
         <Route element={<ProtectedRoute />}>
+
+          {/* =================================================== */}
+          {/* ОБЩЕЕ                                             */}
+          {/* =================================================== */}
 
           <Route
             path="/dashboard"
@@ -37,6 +67,11 @@ export default function AppRouter() {
             element={<ProfilePage />}
           />
 
+
+          {/* =================================================== */}
+          {/* ЛОКАЦИИ                                           */}
+          {/* =================================================== */}
+
           <Route
             path="/addresses"
             element={<AddressesPage />}
@@ -47,12 +82,21 @@ export default function AppRouter() {
             element={<ZonesPage />}
           />
 
+
+          {/* =================================================== */}
+          {/* ПОЛЬЗОВАТЕЛИ                                      */}
+          {/* =================================================== */}
+
           <Route
             path="/users"
             element={<UsersPage />}
           />
 
-          {/* Оборудование */}
+
+          {/* =================================================== */}
+          {/* ОБОРУДОВАНИЕ — ADMIN                              */}
+          {/* =================================================== */}
+
           <Route
             path="/equipment/types"
             element={<EquipmentTypesPage />}
@@ -63,12 +107,31 @@ export default function AppRouter() {
             element={<EquipmentPage />}
           />
 
+
+          {/* =================================================== */}
+          {/* МОЁ ОБОРУДОВАНИЕ — CLIENT                         */}
+          {/* =================================================== */}
+
+          <Route
+            path="/my-equipment"
+            element={<MyEquipmentPage />}
+          />
+
         </Route>
 
-        {/* Неизвестный маршрут */}
+
+        {/* ===================================================== */}
+        {/* НЕИЗВЕСТНЫЙ МАРШРУТ                                  */}
+        {/* ===================================================== */}
+
         <Route
           path="*"
-          element={<Navigate to="/" replace />}
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
         />
 
       </Routes>
