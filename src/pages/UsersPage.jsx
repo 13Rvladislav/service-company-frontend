@@ -3265,12 +3265,8 @@ Email: ${createdEmployee.email}
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField fullWidth required label="Статус мастера" value={editForm.status} onChange={handleEditChange("status")} helperText="AVAILABLE / BUSY / OFFLINE" />
-                  </Grid>
-                  <Grid size={{ xs: 12 }}>
-                    <TextField fullWidth required label="Специализация" value={editForm.specialization} onChange={handleEditChange("specialization")} />
-                  </Grid>
+                  
+                  
                 </>
               )}
 
