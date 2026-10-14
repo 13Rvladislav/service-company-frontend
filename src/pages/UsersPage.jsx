@@ -235,7 +235,6 @@ export default function UsersPage() {
     houseId: "",
     apartment: "",
     employeeNumber: "",
-    specialization: "",
     status: "",
     department: "",
     position: "",
@@ -703,7 +702,6 @@ const handleOpenUser = async (id) => {
       houseId: selectedUser.houseId || "",
       apartment: selectedUser.apartment || "",
       employeeNumber: selectedUser.employeeNumber || "",
-      specialization: getSpecializationNames(selectedUser).join(", "),
       status: selectedUser.status || "",
       department: selectedUser.department || "",
       position: selectedUser.position || "",
@@ -810,9 +808,6 @@ const handleOpenUser = async (id) => {
           : null,
         employeeNumber: selectedUser.role !== "CLIENT"
           ? editForm.employeeNumber
-          : null,
-        specialization: selectedUser.role === "ENGINEER"
-          ? editForm.specialization
           : null,
         status: selectedUser.role === "ENGINEER"
           ? editForm.status
