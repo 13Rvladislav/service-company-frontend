@@ -815,7 +815,7 @@ const handleOpenUser = async (id) => {
         department: ["DISPATCHER", "ADMIN"].includes(selectedUser.role)
           ? editForm.department
           : null,
-        position: selectedUser.role === "ADMIN"
+        position: ["ENGINEER", "DISPATCHER", "ADMIN"].includes(selectedUser.role)
           ? editForm.position
           : null,
       });
@@ -2956,29 +2956,7 @@ Email: ${createdEmployee.email}
                         "Не указан"
                       }
                     />
-
-                    <InfoRow
-                      icon={
-                        <WorkIcon />
-                      }
-                      label="Отдел"
-                      value={
-                        selectedUser.department ||
-                        "Не указан"
-                      }
-                    />
-
-                    <InfoRow
-                      icon={
-                        <WorkIcon />
-                      }
-                      label="Должность"
-                      value={
-                        selectedUser.position ||
-                        "Не указана"
-                      }
-                    />
-                  </Stack>
+</Stack>
                 </Box>
               )}
 
@@ -3255,23 +3233,70 @@ Email: ${createdEmployee.email}
                 </>
               )}
 
-              {selectedUser?.role === "ENGINEER" && (
+              {["ENGINEER", "MASTER"].includes(selectedUser?.role) && (
                 <>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
+                    <TextField
+                      fullWidth
+                      required
+                      label="Табельный номер"
+                      value={editForm.employeeNumber}
+                      onChange={handleEditChange("employeeNumber")}
+                    />
                   </Grid>
-                  
-                  
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Должность"
+                      value={editForm.position}
+                      onChange={handleEditChange("position")}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControl fullWidth>
+                      <InputLabel id="edit-master-status-label">Статус</InputLabel>
+                      <Select
+                        labelId="edit-master-status-label"
+                        value={editForm.status}
+                        label="Статус"
+                        onChange={handleEditChange("status")}
+                      >
+                        <MenuItem value="AVAILABLE">Доступен</MenuItem>
+                        <MenuItem value="BUSY">Занят</MenuItem>
+                        <MenuItem value="OFFLINE">Не в сети</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
                 </>
               )}
 
               {selectedUser?.role === "DISPATCHER" && (
                 <>
-                  <Grid size={{ xs: 12 }}>
-                    <TextField fullWidth required label="Табельный номер" value={editForm.employeeNumber} onChange={handleEditChange("employeeNumber")} />
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      required
+                      label="Табельный номер"
+                      value={editForm.employeeNumber}
+                      onChange={handleEditChange("employeeNumber")}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Должность"
+                      value={editForm.position}
+                      onChange={handleEditChange("position")}
+                    />
                   </Grid>
                   <Grid size={{ xs: 12 }}>
-                    <TextField fullWidth required label="Отдел" value={editForm.department} onChange={handleEditChange("department")} />
+                    <TextField
+                      fullWidth
+                      required
+                      label="Отдел"
+                      value={editForm.department}
+                      onChange={handleEditChange("department")}
+                    />
                   </Grid>
                 </>
               )}
