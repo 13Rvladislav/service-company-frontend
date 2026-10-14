@@ -1,3 +1,4 @@
+
 import {
   BrowserRouter,
   Routes,
@@ -19,17 +20,16 @@ import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
 import MyEquipmentPage from "../pages/MyEquipmentPage";
 
-import ProtectedRoute from "./ProtectedRoute";
+import SpecializationsPage from "../pages/SpecializationsPage";
+import SpecializationAssignmentPage from "../pages/SpecializationAssignmentPage";
 
+import ProtectedRoute from "./ProtectedRoute";
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-
-        {/* ===================================================== */}
-        {/* ПУБЛИЧНЫЕ СТРАНИЦЫ                                   */}
-        {/* ===================================================== */}
+        {/* Публичные страницы */}
 
         <Route
           path="/"
@@ -46,16 +46,10 @@ export default function AppRouter() {
           element={<ForgotPasswordPage />}
         />
 
-
-        {/* ===================================================== */}
-        {/* ЗАЩИЩЁННЫЕ СТРАНИЦЫ                                  */}
-        {/* ===================================================== */}
+        {/* Защищённые страницы */}
 
         <Route element={<ProtectedRoute />}>
-
-          {/* =================================================== */}
-          {/* ОБЩЕЕ                                             */}
-          {/* =================================================== */}
+          {/* Общее */}
 
           <Route
             path="/dashboard"
@@ -67,10 +61,7 @@ export default function AppRouter() {
             element={<ProfilePage />}
           />
 
-
-          {/* =================================================== */}
-          {/* ЛОКАЦИИ                                           */}
-          {/* =================================================== */}
+          {/* Локации */}
 
           <Route
             path="/addresses"
@@ -82,20 +73,14 @@ export default function AppRouter() {
             element={<ZonesPage />}
           />
 
-
-          {/* =================================================== */}
-          {/* ПОЛЬЗОВАТЕЛИ                                      */}
-          {/* =================================================== */}
+          {/* Пользователи */}
 
           <Route
             path="/users"
             element={<UsersPage />}
           />
 
-
-          {/* =================================================== */}
-          {/* ОБОРУДОВАНИЕ — ADMIN                              */}
-          {/* =================================================== */}
+          {/* Оборудование */}
 
           <Route
             path="/equipment/types"
@@ -107,33 +92,32 @@ export default function AppRouter() {
             element={<EquipmentPage />}
           />
 
-
-          {/* =================================================== */}
-          {/* МОЁ ОБОРУДОВАНИЕ — CLIENT                         */}
-          {/* =================================================== */}
-
           <Route
             path="/my-equipment"
             element={<MyEquipmentPage />}
           />
 
+          {/* Специализации */}
+
+          <Route
+            path="/specializations"
+            element={<SpecializationsPage />}
+          />
+
+          {/* Назначение специализаций мастерам */}
+
+          <Route
+            path="/specializations/assign"
+            element={<SpecializationAssignmentPage />}
+          />
         </Route>
 
-
-        {/* ===================================================== */}
-        {/* НЕИЗВЕСТНЫЙ МАРШРУТ                                  */}
-        {/* ===================================================== */}
+        {/* Неизвестный маршрут */}
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/"
-              replace
-            />
-          }
+          element={<Navigate to="/" replace />}
         />
-
       </Routes>
     </BrowserRouter>
   );
