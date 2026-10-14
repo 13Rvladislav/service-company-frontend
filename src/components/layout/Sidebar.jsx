@@ -37,16 +37,21 @@ export default function Sidebar({ user }) {
 
   const isLocationsPage =
     location.pathname.startsWith("/addresses") ||
-    location.pathname.startsWith("/zones");
+    location.pathname === "/zones";
 
   const isEquipmentPage = location.pathname.startsWith("/equipment");
+
   const isSpecializationsPage =
     location.pathname.startsWith("/specializations");
+
+  const isAdminMastersPage =
+    isSpecializationsPage ||
+    location.pathname.startsWith("/zones/assign");
 
   const [locationsOpen, setLocationsOpen] = useState(isLocationsPage);
   const [equipmentOpen, setEquipmentOpen] = useState(isEquipmentPage);
   const [specializationsOpen, setSpecializationsOpen] =
-    useState(isSpecializationsPage);
+    useState(isAdminMastersPage);
 
   const mainItemSx = {
     minHeight: 44,
@@ -135,6 +140,7 @@ export default function Sidebar({ user }) {
         <ListItemIcon sx={{ minWidth: 38 }}>
           <Icon />
         </ListItemIcon>
+
         <ListItemText
           primary={label}
           primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
@@ -154,6 +160,7 @@ export default function Sidebar({ user }) {
         <ListItemIcon sx={{ minWidth: 34 }}>
           <Icon sx={{ fontSize: 20 }} />
         </ListItemIcon>
+
         <ListItemText
           primary={label}
           primaryTypographyProps={{ fontSize: 13 }}
@@ -176,10 +183,12 @@ export default function Sidebar({ user }) {
           <ListItemIcon sx={{ minWidth: 38 }}>
             <Icon />
           </ListItemIcon>
+
           <ListItemText
             primary={title}
             primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
           />
+
           {open ? (
             <ExpandMoreIcon sx={{ fontSize: 20, color: "#94A3B8" }} />
           ) : (
@@ -196,6 +205,7 @@ export default function Sidebar({ user }) {
     </>
   );
 
+  // Локации: исходные пункты без назначения зон.
   const renderLocations = () =>
     renderGroup({
       title: "Локации",
@@ -206,7 +216,7 @@ export default function Sidebar({ user }) {
       children: (
         <>
           {renderNestedItem("/addresses", "Адреса", HomeWorkOutlinedIcon)}
-          {renderNestedItem("/zones", "Зоны", MapOutlinedIcon)}
+          {renderNestedItem("/zones", "Зоны", MapOutlinedIcon, true)}
         </>
       ),
     });
@@ -225,6 +235,7 @@ export default function Sidebar({ user }) {
             "Типы оборудования",
             CategoryOutlinedIcon
           )}
+
           {renderNestedItem(
             "/equipment",
             "Оборудование",
@@ -235,13 +246,15 @@ export default function Sidebar({ user }) {
       ),
     });
 
+  // Администратор: назначение специализаций и зон находится
+  // в одной существующей группе «Администрирование мастеров».
   const renderAdminSpecializations = () =>
     renderGroup({
-      title: "Специализации",
+      title: "Администрирование мастеров",
       Icon: EngineeringOutlinedIcon,
       open: specializationsOpen,
       onToggle: () => setSpecializationsOpen((prev) => !prev),
-      active: isSpecializationsPage,
+      active: isAdminMastersPage,
       children: (
         <>
           {renderNestedItem(
@@ -250,15 +263,23 @@ export default function Sidebar({ user }) {
             EngineeringOutlinedIcon,
             true
           )}
+
           {renderNestedItem(
             "/specializations/assign",
-            "Назначение мастерам",
+            "Назначение специализации",
             AssignmentIndOutlinedIcon
+          )}
+
+          {renderNestedItem(
+            "/zones/assign",
+            "Назначение зон",
+            MapOutlinedIcon
           )}
         </>
       ),
     });
 
+  // Диспетчер: сохраняем исходную группу и её пункты.
   const renderDispatcherSpecializations = () =>
     renderGroup({
       title: "Специализации",
@@ -310,11 +331,6 @@ export default function Sidebar({ user }) {
 
       <SectionTitle>РАБОТА</SectionTitle>
       {renderItem("/requests", "Мои заявки", AssignmentOutlinedIcon)}
-      {renderItem(
-        "/specializations",
-        "Мои специализации",
-        EngineeringOutlinedIcon
-      )}
     </>
   );
 
@@ -377,10 +393,15 @@ export default function Sidebar({ user }) {
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1 }}>
+            <Typography
+              sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1 }}
+            >
               Service
             </Typography>
-            <Typography sx={{ fontSize: 11, color: "#BFDBFE", lineHeight: 1.1 }}>
+
+            <Typography
+              sx={{ fontSize: 11, color: "#BFDBFE", lineHeight: 1.1 }}
+            >
               Company
             </Typography>
           </Box>

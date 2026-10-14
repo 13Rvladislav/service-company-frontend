@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Avatar,
   Box,
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Divider,
   Grid,
@@ -16,211 +18,226 @@ import {
   Select,
   MenuItem,
 } from "@mui/material";
-
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import SaveIcon from "@mui/icons-material/Save";
-
 import MainLayout from "../components/layout/MainLayout";
-
 import {
   getCurrentProfile,
   updateProfile,
   uploadAvatar,
 } from "../api/userApi";
-
 import {
   getAllCities,
   getStreetsByCity,
   getHousesByStreet,
 } from "../api/addressApi";
-
 function ProfilePage() {
   const fileInput = useRef(null);
-
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
   const [user, setUser] = useState(null);
-
-  // режим редактирования
   const [editMode, setEditMode] = useState(false);
   const [originalUser, setOriginalUser] = useState(null);
-
-  // каскад адреса
+  // Каскадный выбор адреса клиента.
   const [cities, setCities] = useState([]);
   const [streets, setStreets] = useState([]);
   const [houses, setHouses] = useState([]);
-
   const [selectedCityId, setSelectedCityId] = useState("");
   const [selectedStreetId, setSelectedStreetId] = useState("");
   const [selectedHouseId, setSelectedHouseId] = useState("");
-
   useEffect(() => {
     load();
   }, []);
-
   const load = async () => {
+    setLoading(true);
+    setPageError("");
     try {
       const profile = await getCurrentProfile();
-
       setUser(profile);
       setOriginalUser(profile);
-
       const cityList = await getAllCities();
-      setCities(cityList);
-
-      // восстановление адреса пользователя
+      setCities(Array.isArray(cityList) ? cityList : []);
+      // Восстанавливаем адрес клиента.
       if (profile.cityId) {
         setSelectedCityId(profile.cityId);
-
         const streetList = await getStreetsByCity(profile.cityId);
-        setStreets(streetList);
-
+        setStreets(Array.isArray(streetList) ? streetList : []);
         if (profile.streetId) {
           setSelectedStreetId(profile.streetId);
-
           const houseList = await getHousesByStreet(profile.streetId);
-          setHouses(houseList);
-
+          setHouses(Array.isArray(houseList) ? houseList : []);
           if (profile.houseId) {
             setSelectedHouseId(profile.houseId);
           }
         }
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error("Не удалось загрузить профиль:", error);
+      setPageError(
+        error?.response?.data?.message ||
+          "Не удалось загрузить профиль пользователя."
+      );
     } finally {
       setLoading(false);
     }
   };
-
   const changeField = (field, value) => {
-    setUser((prev) => ({
-      ...prev,
+    setUser((previous) => ({
+      ...previous,
       [field]: value,
     }));
   };
-
-  // ---------- каскад адреса ----------
-
+  // ---------- Каскад адреса ----------
   const handleCityChange = async (cityId) => {
     setSelectedCityId(cityId);
     setSelectedStreetId("");
     setSelectedHouseId("");
-
-    setUser((prev) => ({
-      ...prev,
+    setUser((previous) => ({
+      ...previous,
       cityId,
       streetId: null,
       houseId: null,
     }));
-
-    const streetList = await getStreetsByCity(cityId);
-    setStreets(streetList);
-    setHouses([]);
+    try {
+      const streetList = cityId
+        ? await getStreetsByCity(cityId)
+        : [];
+      setStreets(Array.isArray(streetList) ? streetList : []);
+      setHouses([]);
+    } catch (error) {
+      console.error("Не удалось загрузить улицы:", error);
+      setPageError("Не удалось загрузить улицы выбранного города.");
+    }
   };
-
   const handleStreetChange = async (streetId) => {
     setSelectedStreetId(streetId);
     setSelectedHouseId("");
-
-    setUser((prev) => ({
-      ...prev,
+    setUser((previous) => ({
+      ...previous,
       streetId,
       houseId: null,
     }));
-
-    const houseList = await getHousesByStreet(streetId);
-    setHouses(houseList);
+    try {
+      const houseList = streetId
+        ? await getHousesByStreet(streetId)
+        : [];
+      setHouses(Array.isArray(houseList) ? houseList : []);
+    } catch (error) {
+      console.error("Не удалось загрузить дома:", error);
+      setPageError("Не удалось загрузить дома выбранной улицы.");
+    }
   };
-
   const handleHouseChange = (houseId) => {
     setSelectedHouseId(houseId);
-
-    setUser((prev) => ({
-      ...prev,
+    setUser((previous) => ({
+      ...previous,
       houseId,
     }));
   };
-
+  // ---------- Фотография ----------
   const handleAvatar = async (event) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUser((prev) => ({
-      ...prev,
-      avatarPreview: URL.createObjectURL(file),
+    if (!file) {
+      return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    setUser((previous) => ({
+      ...previous,
+      avatarPreview: previewUrl,
     }));
-
     try {
       await uploadAvatar(file);
-
-      setUser((prev) => ({
-        ...prev,
+      setUser((previous) => ({
+        ...previous,
         hasAvatar: true,
       }));
-    } catch (err) {
-      console.error(err);
+      setOriginalUser((previous) => ({
+        ...previous,
+        hasAvatar: true,
+      }));
+    } catch (error) {
+      console.error("Не удалось загрузить фотографию:", error);
+      setPageError(
+        error?.response?.data?.message ||
+          "Не удалось загрузить фотографию."
+      );
+    } finally {
+      // Позволяем повторно выбрать тот же файл.
+      event.target.value = "";
     }
   };
-
+  // ---------- Сохранение профиля ----------
   const handleSave = async () => {
+    setPageError("");
     try {
-      const updated = await updateProfile({
+      // В запросе нет zoneId и zones.
+      // Назначение зон выполняется только на отдельной странице.
+      const payload = {
         firstName: user.firstName,
         lastName: user.lastName,
         middleName: user.middleName,
         phone: user.phone,
-
-        houseId: selectedHouseId,
-        apartment: user.apartment,
-      });
-
+      };
+      // Адрес изменяется через профиль только для клиента.
+      if (user.role === "CLIENT") {
+        payload.houseId = selectedHouseId || null;
+        payload.apartment = user.apartment || "";
+      }
+      const updated = await updateProfile(payload);
+      // Сохраняем зоны из загруженного профиля, даже если ответ
+      // обновления не содержит поле zones.
       const merged = {
         ...user,
         ...updated,
+        zones: user.zones || [],
       };
-
       setUser(merged);
       setOriginalUser(merged);
       setEditMode(false);
-
-      setUser(updated);
-      setOriginalUser(updated);
-      setEditMode(false);
-
-      alert("Профиль успешно сохранён");
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка сохранения");
+      window.alert("Профиль успешно сохранён");
+    } catch (error) {
+      console.error("Не удалось сохранить профиль:", error);
+      setPageError(
+        error?.response?.data?.message ||
+          "Ошибка сохранения профиля."
+      );
     }
   };
-
+  // ---------- Отмена редактирования ----------
   const handleCancel = async () => {
+    if (!originalUser) {
+      setEditMode(false);
+      return;
+    }
     setUser(originalUser);
-
     setSelectedCityId(originalUser.cityId || "");
     setSelectedStreetId(originalUser.streetId || "");
     setSelectedHouseId(originalUser.houseId || "");
-
-    if (originalUser.cityId) {
-      const streetList = await getStreetsByCity(originalUser.cityId);
-      setStreets(streetList);
-
-      if (originalUser.streetId) {
-        const houseList = await getHousesByStreet(originalUser.streetId);
-        setHouses(houseList);
+    try {
+      if (originalUser.cityId) {
+        const streetList = await getStreetsByCity(originalUser.cityId);
+        setStreets(Array.isArray(streetList) ? streetList : []);
+        if (originalUser.streetId) {
+          const houseList = await getHousesByStreet(originalUser.streetId);
+          setHouses(Array.isArray(houseList) ? houseList : []);
+        } else {
+          setHouses([]);
+        }
       } else {
+        setStreets([]);
         setHouses([]);
       }
+    } catch (error) {
+      console.error("Не удалось восстановить адрес:", error);
     }
-
+    setPageError("");
     setEditMode(false);
   };
-
-  if (loading || !user) {
+  if (loading) {
     return (
       <Box
         sx={{
-          height: "100vh",
+          minHeight: "100vh",
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
@@ -230,21 +247,42 @@ function ProfilePage() {
       </Box>
     );
   }
-
+  if (!user) {
+    return (
+      <MainLayout user={user}>
+        <Alert severity="error">
+          {pageError || "Не удалось загрузить профиль."}
+        </Alert>
+      </MainLayout>
+    );
+  }
+  const roleLabels = {
+    CLIENT: "Клиент",
+    ENGINEER: "Мастер",
+    DISPATCHER: "Диспетчер",
+    ADMIN: "Администратор",
+  };
+  const roleLabel = roleLabels[user.role] || user.role || "Не указана";
   return (
     <MainLayout user={user}>
       <Box sx={{ width: "100%" }}>
         <Typography variant="h4" fontWeight={700} gutterBottom>
           Профиль
         </Typography>
-
-        <Typography color="text.secondary" sx={{ mb: 4 }}>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
           Управление личными данными пользователя
         </Typography>
-
+        {pageError && (
+          <Alert
+            severity="error"
+            sx={{ mb: 3 }}
+            onClose={() => setPageError("")}
+          >
+            {pageError}
+          </Alert>
+        )}
         <Grid container spacing={3}>
-          {/* ===== ЛЕВАЯ КАРТОЧКА ===== */}
-
+          {/* Левая карточка профиля */}
           <Grid size={{ xs: 12, md: 3 }}>
             <Card
               sx={{
@@ -262,7 +300,6 @@ function ProfilePage() {
                     "linear-gradient(135deg,#2563EB 0%,#1D4ED8 100%)",
                 }}
               />
-
               <CardContent sx={{ mt: -7 }}>
                 <Stack alignItems="center" spacing={2}>
                   <Avatar
@@ -283,37 +320,20 @@ function ProfilePage() {
                   >
                     {user.firstName?.charAt(0)}
                   </Avatar>
-
                   <Box textAlign="center">
                     <Typography variant="h6" fontWeight={700}>
                       {user.lastName} {user.firstName}
                     </Typography>
-
                     <Typography variant="body2" color="text.secondary">
                       {user.middleName}
                     </Typography>
                   </Box>
-
-                  <Box
-                    sx={{
-                      px: 2,
-                      py: 0.5,
-                      borderRadius: 5,
-                      bgcolor: "#DBEAFE",
-                    }}
-                  >
-                    <Typography
-                      fontWeight={700}
-                      fontSize={13}
-                      color="#1D4ED8"
-                      textTransform="uppercase"
-                    >
-                      {user.role}
-                    </Typography>
-                  </Box>
-
+                  <Chip
+                    label={roleLabel}
+                    color="primary"
+                    sx={{ fontWeight: 700 }}
+                  />
                   <Divider sx={{ width: "100%" }} />
-
                   <Box sx={{ width: "100%" }}>
                     <Stack spacing={1.5}>
                       <Box>
@@ -321,45 +341,40 @@ function ProfilePage() {
                           Фамилия
                         </Typography>
                         <Typography fontWeight={600}>
-                          {user.lastName}
+                          {user.lastName || "—"}
                         </Typography>
                       </Box>
-
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Имя
                         </Typography>
                         <Typography fontWeight={600}>
-                          {user.firstName}
+                          {user.firstName || "—"}
                         </Typography>
                       </Box>
-
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Отчество
                         </Typography>
                         <Typography fontWeight={600}>
-                          {user.middleName}
+                          {user.middleName || "—"}
                         </Typography>
                       </Box>
-
                       <Box>
                         <Typography variant="caption" color="text.secondary">
                           Тип профиля
                         </Typography>
-
                         <Typography fontWeight={700} color="primary">
-                          {user.role}
+                          {roleLabel}
                         </Typography>
                       </Box>
                     </Stack>
                   </Box>
-
                   <Button
                     fullWidth
                     variant="contained"
                     startIcon={<PhotoCameraIcon />}
-                    onClick={() => fileInput.current.click()}
+                    onClick={() => fileInput.current?.click()}
                     sx={{
                       mt: 1,
                       borderRadius: 3,
@@ -370,7 +385,6 @@ function ProfilePage() {
                   >
                     Сменить фото
                   </Button>
-
                   <input
                     hidden
                     ref={fileInput}
@@ -382,21 +396,16 @@ function ProfilePage() {
               </CardContent>
             </Card>
           </Grid>
-
-          {/* ===== ПРАВАЯ ЧАСТЬ ===== */}
-
+          {/* Правая часть профиля */}
           <Grid size={{ xs: 12, md: 9 }}>
             <Stack spacing={3}>
-              {/* ================= ПЕРСОНАЛЬНЫЕ ДАННЫЕ ================= */}
-
+              {/* Персональные данные */}
               <Card sx={{ borderRadius: 3 }}>
                 <CardContent>
                   <Typography variant="h6" fontWeight={700}>
                     Персональные данные
                   </Typography>
-
                   <Divider sx={{ my: 2 }} />
-
                   <Grid container spacing={2}>
                     <Grid size={{ xs: 12, sm: 4 }}>
                       <TextField
@@ -404,48 +413,44 @@ function ProfilePage() {
                         label="Фамилия"
                         disabled={!editMode}
                         value={user.lastName || ""}
-                        onChange={(e) =>
-                          changeField("lastName", e.target.value)
+                        onChange={(event) =>
+                          changeField("lastName", event.target.value)
                         }
                       />
                     </Grid>
-
                     <Grid size={{ xs: 12, sm: 4 }}>
                       <TextField
                         fullWidth
                         label="Имя"
                         disabled={!editMode}
                         value={user.firstName || ""}
-                        onChange={(e) =>
-                          changeField("firstName", e.target.value)
+                        onChange={(event) =>
+                          changeField("firstName", event.target.value)
                         }
                       />
                     </Grid>
-
                     <Grid size={{ xs: 12, sm: 4 }}>
                       <TextField
                         fullWidth
                         label="Отчество"
                         disabled={!editMode}
                         value={user.middleName || ""}
-                        onChange={(e) =>
-                          changeField("middleName", e.target.value)
+                        onChange={(event) =>
+                          changeField("middleName", event.target.value)
                         }
                       />
                     </Grid>
-
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <TextField
                         fullWidth
                         label="Телефон"
                         disabled={!editMode}
                         value={user.phone || ""}
-                        onChange={(e) =>
-                          changeField("phone", e.target.value)
+                        onChange={(event) =>
+                          changeField("phone", event.target.value)
                         }
                       />
                     </Grid>
-
                     <Grid size={{ xs: 12, sm: 6 }}>
                       <TextField
                         fullWidth
@@ -457,31 +462,24 @@ function ProfilePage() {
                   </Grid>
                 </CardContent>
               </Card>
-
-              {/* ================= CLIENT ================= */}
-
+              {/* Адрес клиента */}
               {user.role === "CLIENT" && (
                 <Card sx={{ borderRadius: 3 }}>
                   <CardContent>
                     <Typography variant="h6" fontWeight={700}>
                       Адрес проживания
                     </Typography>
-
                     <Divider sx={{ my: 2 }} />
-
                     <Grid container spacing={2}>
-                      {/* ГОРОД */}
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <FormControl fullWidth>
                           <InputLabel>Город</InputLabel>
-
                           <Select
                             value={selectedCityId}
                             label="Город"
                             disabled={!editMode}
-                            onChange={(e) =>
-                              handleCityChange(e.target.value)
+                            onChange={(event) =>
+                              handleCityChange(event.target.value)
                             }
                           >
                             {cities.map((city) => (
@@ -492,19 +490,15 @@ function ProfilePage() {
                           </Select>
                         </FormControl>
                       </Grid>
-
-                      {/* УЛИЦА */}
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <FormControl fullWidth>
                           <InputLabel>Улица</InputLabel>
-
                           <Select
                             value={selectedStreetId}
                             label="Улица"
                             disabled={!editMode || !selectedCityId}
-                            onChange={(e) =>
-                              handleStreetChange(e.target.value)
+                            onChange={(event) =>
+                              handleStreetChange(event.target.value)
                             }
                           >
                             {streets.map((street) => (
@@ -515,19 +509,15 @@ function ProfilePage() {
                           </Select>
                         </FormControl>
                       </Grid>
-
-                      {/* ДОМ */}
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <FormControl fullWidth>
                           <InputLabel>Дом</InputLabel>
-
                           <Select
                             value={selectedHouseId}
                             label="Дом"
                             disabled={!editMode || !selectedStreetId}
-                            onChange={(e) =>
-                              handleHouseChange(e.target.value)
+                            onChange={(event) =>
+                              handleHouseChange(event.target.value)
                             }
                           >
                             {houses.map((house) => (
@@ -538,17 +528,14 @@ function ProfilePage() {
                           </Select>
                         </FormControl>
                       </Grid>
-
-                      {/* КВАРТИРА */}
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
                           label="Квартира"
                           disabled={!editMode}
                           value={user.apartment || ""}
-                          onChange={(e) =>
-                            changeField("apartment", e.target.value)
+                          onChange={(event) =>
+                            changeField("apartment", event.target.value)
                           }
                         />
                       </Grid>
@@ -556,20 +543,16 @@ function ProfilePage() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* ================= MASTER ================= */}
-
+              {/* Рабочая информация мастера */}
               {user.role === "ENGINEER" && (
                 <Card sx={{ borderRadius: 3 }}>
-                  <CardContent>
+                  <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                     <Typography variant="h6" fontWeight={700}>
                       Рабочая информация
                     </Typography>
-
                     <Divider sx={{ my: 2 }} />
-
                     <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, sm: 6 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <TextField
                           fullWidth
                           disabled
@@ -577,17 +560,7 @@ function ProfilePage() {
                           value={user.position || ""}
                         />
                       </Grid>
-
-                      <Grid size={{ xs: 12, sm: 6 }}>
-                        <TextField
-                          fullWidth
-                          disabled
-                          label="Специализация"
-                          value={user.specialization || ""}
-                        />
-                      </Grid>
-
-                      <Grid size={{ xs: 12, sm: 6 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <TextField
                           fullWidth
                           disabled
@@ -595,8 +568,7 @@ function ProfilePage() {
                           value={user.employeeNumber || ""}
                         />
                       </Grid>
-
-                      <Grid size={{ xs: 12, sm: 6 }}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <TextField
                           fullWidth
                           disabled
@@ -604,30 +576,50 @@ function ProfilePage() {
                           value={user.status || ""}
                         />
                       </Grid>
-
-                      <Grid size={{ xs: 12 }}>
+                      <Grid size={{ xs: 12, md: 6 }}>
                         <TextField
                           fullWidth
                           disabled
-                          label="Зона обслуживания"
-                          value={user.zoneName || ""}
+                          label="Специализация"
+                          value={
+                            Array.isArray(user.specializations) &&
+                            user.specializations.some((specialization) => specialization?.name)
+                              ? user.specializations
+                                  .filter((specialization) => specialization?.name)
+                                  .map((specialization) => specialization.name)
+                                  .join(", ")
+                              : user.specialization || "Специализация не назначена"
+                          }
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField
+                          fullWidth
+                          disabled
+                          label="Зоны обслуживания"
+                          value={
+                            Array.isArray(user.zones) && user.zones.some((zone) => zone?.name)
+                              ? user.zones
+                                  .filter((zone) => zone?.name)
+                                  .map((zone) => zone.name)
+                                  .join(", ")
+                              : "Зона не назначена"
+                          }
+                         
                         />
                       </Grid>
                     </Grid>
                   </CardContent>
                 </Card>
               )}
-              {/* ================= DISPATCHER ================= */}
-
+              {/* Рабочая информация диспетчера */}
               {user.role === "DISPATCHER" && (
                 <Card sx={{ borderRadius: 3 }}>
                   <CardContent>
                     <Typography variant="h6" fontWeight={700}>
                       Рабочая информация
                     </Typography>
-
                     <Divider sx={{ my: 2 }} />
-
                     <Grid container spacing={2}>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
@@ -637,7 +629,6 @@ function ProfilePage() {
                           value={user.position || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
@@ -646,7 +637,6 @@ function ProfilePage() {
                           value={user.department || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
@@ -655,7 +645,6 @@ function ProfilePage() {
                           value={user.employeeNumber || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
@@ -668,18 +657,14 @@ function ProfilePage() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* ================= ADMIN ================= */}
-
+              {/* Рабочая информация администратора */}
               {user.role === "ADMIN" && (
                 <Card sx={{ borderRadius: 3 }}>
                   <CardContent>
                     <Typography variant="h6" fontWeight={700}>
                       Рабочая информация
                     </Typography>
-
                     <Divider sx={{ my: 2 }} />
-
                     <Grid container spacing={2}>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
@@ -689,7 +674,6 @@ function ProfilePage() {
                           value={user.position || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
@@ -698,7 +682,6 @@ function ProfilePage() {
                           value={user.department || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
@@ -707,23 +690,25 @@ function ProfilePage() {
                           value={user.employeeNumber || ""}
                         />
                       </Grid>
-
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
                           disabled
                           label="Роль"
-                          value={user.role}
+                          value={roleLabel}
                         />
                       </Grid>
                     </Grid>
                   </CardContent>
                 </Card>
               )}
-
-              {/* ================= КНОПКИ ================= */}
-
-              <Box display="flex" justifyContent="flex-end" gap={3}>
+              {/* Кнопки редактирования */}
+              <Box
+                display="flex"
+                justifyContent="flex-end"
+                gap={2}
+                flexWrap="wrap"
+              >
                 {!editMode ? (
                   <Button
                     variant="contained"
@@ -739,11 +724,9 @@ function ProfilePage() {
                       color="inherit"
                       size="large"
                       onClick={handleCancel}
-                      sx={{ mr: 2 }}
                     >
                       Отмена
                     </Button>
-
                     <Button
                       variant="contained"
                       size="large"
@@ -762,5 +745,4 @@ function ProfilePage() {
     </MainLayout>
   );
 }
-
 export default ProfilePage;

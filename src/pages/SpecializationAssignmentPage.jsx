@@ -379,13 +379,29 @@ export default function SpecializationAssignmentPage() {
               </Box>
             </Stack>
           </Box>
-
           <Button
             variant="outlined"
-            startIcon={<RefreshOutlinedIcon />}
             onClick={loadData}
             disabled={loading || saving}
-            sx={{ borderRadius: 2, px: 2.5, py: 1.1 }}
+            startIcon={<RefreshOutlinedIcon sx={{ fontSize: "16px !important" }} />}
+            sx={{
+              height: 36,
+              minHeight: 36,
+              minWidth: 0,
+              width: "fit-content",
+              px: 1.5,
+              py: 0,
+              fontSize: "0.8125rem",
+              lineHeight: 1.5,
+              fontWeight: 500,
+              borderRadius: 2,
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              "& .MuiButton-startIcon": {
+                marginRight: "6px",
+                marginLeft: 0,
+              },
+            }}
           >
             Обновить данные
           </Button>

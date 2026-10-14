@@ -44,7 +44,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import EditIcon from "@mui/icons-material/Edit";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
 
@@ -65,6 +65,8 @@ import {
   getStreetsByCity,
   getHousesByStreet,
 } from "../api/addressApi";
+
+import { getMasterZones } from "../api/zoneApi";
 
 /* ========================================================= */
 /* РОЛИ */
@@ -113,6 +115,42 @@ const statusLabels = {
   BUSY: "Занят",
   OFFLINE: "Не в сети",
 };
+
+/* ========================================================= */
+/* НОРМАЛИЗАЦИЯ НАЗНАЧЕНИЙ МАСТЕРА */
+/* ========================================================= */
+
+function getSpecializationNames(user) {
+  const source = Array.isArray(user?.specializations)
+    ? user.specializations
+    : user?.specialization
+      ? [user.specialization]
+      : [];
+
+  return source
+    .map((item) => {
+      if (typeof item === "string") return item;
+      return item?.name || item?.specializationName || item?.title || "";
+    })
+    .filter(Boolean);
+}
+
+function getZoneNames(user) {
+  const source = Array.isArray(user?.zones)
+    ? user.zones
+    : Array.isArray(user?.masterZones)
+      ? user.masterZones
+      : user?.zoneName
+        ? [user.zoneName]
+        : [];
+
+  return source
+    .map((item) => {
+      if (typeof item === "string") return item;
+      return item?.name || item?.zoneName || item?.title || "";
+    })
+    .filter(Boolean);
+}
 
 /* ========================================================= */
 /* COMPONENT */
@@ -198,7 +236,6 @@ export default function UsersPage() {
     apartment: "",
     employeeNumber: "",
     specialization: "",
-    zoneId: "",
     status: "",
     department: "",
     position: "",
@@ -336,52 +373,58 @@ export default function UsersPage() {
   /* ОТКРЫТИЕ КАРТОЧКИ */
   /* ========================================================= */
 
-  const handleOpenUser = async (id) => {
-    setCardOpen(true);
-    setCardLoading(true);
-    setCardError("");
-    setStatusError("");
+const handleOpenUser = async (id) => {
+  setCardOpen(true);
+  setCardLoading(true);
+  setCardError("");
 
-    setSelectedUser(null);
+  setSelectedUser(null);
 
-    setSelectedAddress({
-      city: null,
-      street: null,
-      house: null,
-    });
+  setSelectedAddress({
+    city: null,
+    street: null,
+    house: null,
+  });
 
-    try {
-      const data =
-        await getUserCard(id);
+  try {
+    const data = await getUserCard(id);
 
-      setSelectedUser(data);
+    let userData = data;
 
-      /*
-       * Для клиента отдельно
-       * определяем человекочитаемый адрес.
-       */
-      if (
-        data.role === "CLIENT" &&
-        data.cityId &&
-        data.streetId &&
-        data.houseId
-      ) {
-        resolveUserAddress(data);
+    if (data.role === "ENGINEER" && data.id) {
+      try {
+        const zones = await getMasterZones(data.id);
+
+        userData = {
+          ...data,
+          zones: Array.isArray(zones) ? zones : [],
+        };
+      } catch (error) {
+        console.error("Не удалось загрузить зоны мастера:", error);
       }
-    } catch (error) {
-      console.error(
-        "Не удалось загрузить карточку пользователя:",
-        error
-      );
-
-      setCardError(
-        error?.response?.data?.message ||
-          "Не удалось загрузить данные пользователя"
-      );
-    } finally {
-      setCardLoading(false);
     }
-  };
+
+    setSelectedUser(userData);
+
+    if (
+      data.role === "CLIENT" &&
+      data.cityId &&
+      data.streetId &&
+      data.houseId
+    ) {
+      resolveUserAddress(data);
+    }
+  } catch (error) {
+    console.error("Не удалось загрузить карточку пользователя:", error);
+
+    setCardError(
+      error?.response?.data?.message ||
+        "Не удалось загрузить данные пользователя"
+    );
+  } finally {
+    setCardLoading(false);
+  }
+};
 
   /* ========================================================= */
   /* ПОЛУЧЕНИЕ АДРЕСА */
@@ -660,8 +703,7 @@ export default function UsersPage() {
       houseId: selectedUser.houseId || "",
       apartment: selectedUser.apartment || "",
       employeeNumber: selectedUser.employeeNumber || "",
-      specialization: selectedUser.specialization || "",
-      zoneId: selectedUser.zoneId || "",
+      specialization: getSpecializationNames(selectedUser).join(", "),
       status: selectedUser.status || "",
       department: selectedUser.department || "",
       position: selectedUser.position || "",
@@ -771,9 +813,6 @@ export default function UsersPage() {
           : null,
         specialization: selectedUser.role === "ENGINEER"
           ? editForm.specialization
-          : null,
-        zoneId: selectedUser.role === "ENGINEER"
-          ? editForm.zoneId || null
           : null,
         status: selectedUser.role === "ENGINEER"
           ? editForm.status
@@ -1822,7 +1861,7 @@ Email: ${createdEmployee.email}
                                       color="error"
                                     />
                                   ) : (
-                                    <DeleteOutlineIcon
+                                    <DeleteOutlinedIcon
                                       fontSize="small"
                                     />
                                   )}
@@ -2287,24 +2326,7 @@ Email: ${createdEmployee.email}
                 {/* МАСТЕР */}
                 {/* ================================================= */}
 
-                {selectedRole ===
-                  "ENGINEER" && (
-                  <Grid
-                    size={{ xs: 12 }}
-                  >
-                    <TextField
-                      fullWidth
-                      label="Специализация"
-                      value={
-                        createForm.specialization
-                      }
-                      onChange={handleCreateChange(
-                        "specialization"
-                      )}
-                      placeholder="Например: Газовые котлы"
-                    />
-                  </Grid>
-                )}
+               
 
                 {/* ================================================= */}
                 {/* ДИСПЕТЧЕР */}
@@ -2856,16 +2878,75 @@ Email: ${createdEmployee.email}
                       }
                     />
 
-                    <InfoRow
-                      icon={
-                        <WorkIcon />
-                      }
-                      label="Специализация"
-                      value={
-                        selectedUser.specialization ||
-                        "Не указана"
-                      }
-                    />
+                    <Box
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        bgcolor: "#F8FAFC",
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                        sx={{ mb: 1 }}
+                      >
+                        Специализации мастера
+                      </Typography>
+
+                      {getSpecializationNames(selectedUser).length > 0 ? (
+                        <Stack direction="row" flexWrap="wrap" gap={1}>
+                          {getSpecializationNames(selectedUser).map((name, index) => (
+                            <Chip
+                              key={`${name}-${index}`}
+                              label={name}
+                              color="primary"
+                              variant="outlined"
+                              size="small"
+                            />
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Специализации не назначены
+                        </Typography>
+                      )}
+                    </Box>
+
+                    <Box
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 2,
+                        bgcolor: "#F8FAFC",
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        display="block"
+                        sx={{ mb: 1 }}
+                      >
+                        Зоны обслуживания
+                      </Typography>
+
+                      {getZoneNames(selectedUser).length > 0 ? (
+                        <Stack direction="row" flexWrap="wrap" gap={1}>
+                          {getZoneNames(selectedUser).map((name, index) => (
+                            <Chip
+                              key={`${name}-${index}`}
+                              label={name}
+                              color="success"
+                              variant="outlined"
+                              size="small"
+                            />
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Зоны не назначены
+                        </Typography>
+                      )}
+                    </Box>
 
                     <InfoRow
                       icon={
@@ -3190,9 +3271,6 @@ Email: ${createdEmployee.email}
                   <Grid size={{ xs: 12 }}>
                     <TextField fullWidth required label="Специализация" value={editForm.specialization} onChange={handleEditChange("specialization")} />
                   </Grid>
-                  <Grid size={{ xs: 12 }}>
-                    <TextField fullWidth label="ID зоны" value={editForm.zoneId} onChange={handleEditChange("zoneId")} helperText="Необязательно" />
-                  </Grid>
                 </>
               )}
 
@@ -3272,7 +3350,7 @@ Email: ${createdEmployee.email}
                 color: "#DC2626",
               }}
             >
-              <DeleteOutlineIcon />
+              <DeleteOutlinedIcon />
             </Box>
 
             <Typography
@@ -3392,7 +3470,7 @@ Email: ${createdEmployee.email}
                   color="inherit"
                 />
               ) : (
-                <DeleteOutlineIcon />
+                <DeleteOutlinedIcon />
               )
             }
           >
