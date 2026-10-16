@@ -19,6 +19,7 @@ import UsersPage from "../pages/UsersPage";
 import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
 import MyEquipmentPage from "../pages/MyEquipmentPage";
+import MyRequestsPage from "../pages/MyRequestsPage";
 
 import SpecializationsPage from "../pages/SpecializationsPage";
 import SpecializationAssignmentPage from "../pages/SpecializationAssignmentPage";
@@ -31,36 +32,32 @@ export default function AppRouter() {
     <BrowserRouter>
       <Routes>
         {/* Публичные страницы */}
-
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* Защищённые страницы */}
-
         <Route element={<ProtectedRoute />}>
           {/* Общее */}
-
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/profile" element={<ProfilePage />} />
 
-          {/* Локации */}
+          {/* Заявки клиента */}
+          <Route path="/my-requests" element={<MyRequestsPage />} />
 
+          {/* Локации */}
           <Route path="/addresses" element={<AddressesPage />} />
           <Route path="/zones" element={<ZonesPage />} />
 
           {/* Пользователи */}
-
           <Route path="/users" element={<UsersPage />} />
 
           {/* Оборудование */}
-
           <Route path="/equipment/types" element={<EquipmentTypesPage />} />
           <Route path="/equipment" element={<EquipmentPage />} />
           <Route path="/my-equipment" element={<MyEquipmentPage />} />
 
           {/* Специализации */}
-
           <Route path="/specializations" element={<SpecializationsPage />} />
           <Route
             path="/specializations/assign"
@@ -68,7 +65,6 @@ export default function AppRouter() {
           />
 
           {/* Назначение зон мастерам */}
-
           <Route
             path="/zones/assign"
             element={<AssignMasterZonesPage />}
@@ -76,7 +72,6 @@ export default function AppRouter() {
         </Route>
 
         {/* Неизвестный маршрут */}
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
