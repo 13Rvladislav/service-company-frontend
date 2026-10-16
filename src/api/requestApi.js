@@ -1,19 +1,93 @@
 
-import axios from "axios";
+const API_URL = (
+  import.meta.env.VITE_REQUEST_API_URL || "http://localhost:8084/api"
+).replace(/\/+$/, "");
 
-const requestApi = axios.create({
-    baseURL: "http://localhost:8084",
-    withCredentials: true,
-});
+async function requestApi(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...options.headers,
+    },
+  });
 
-export const getMyRequests = async () => {
-    const { data } = await requestApi.get("/api/requests/my");
-    return data;
-};
+  if (!response.ok) {
+    let message = `Ошибка запроса: ${response.status}`;
 
-export const createRequest = async (request) => {
-    const { data } = await requestApi.post("/api/requests", request);
-    return data;
-};
+    try {
+      const error = await response.json();
+      message =
+        error.message ||
+        error.detail ||
+        error.error ||
+        message;
+    } catch {
+      // Ответ сервера может быть без тела или не в формате JSON.
+    }
 
-export default requestApi;
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const contentType = response.headers.get("content-type");
+
+  if (contentType?.includes("application/json")) {
+    return response.json();
+  }
+
+  return null;
+}
+
+/**
+ * Получение заявок текущего клиента.
+ */
+export async function getMyRequests() {
+  const result = await requestApi("/requests/my");
+
+  if (Array.isArray(result)) {
+    return result;
+  }
+
+  return result?.content ?? result?.requests ?? result?.data ?? [];
+}
+
+/**
+ * Получение одной заявки.
+ */
+export function getRequestById(id) {
+  return requestApi(`/requests/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Создание заявки.
+ */
+export function createRequest(data) {
+  return requestApi("/requests", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Редактирование заявки до её принятия.
+ */
+export function updateRequest(id, data) {
+  return requestApi(`/requests/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Отмена заявки до её принятия.
+ */
+export function cancelRequest(id) {
+  return requestApi(`/requests/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+  });
+}
