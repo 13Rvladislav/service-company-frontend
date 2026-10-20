@@ -29,12 +29,10 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
-import { getAllCities, getStreetsByCity, getHousesByStreet } from "../api/addressApi";
-import { getMyEquipment } from "../api/equipmentApi";
 
 import MainLayout from "../components/layout/MainLayout";
 import { getCurrentProfile } from "../api/userApi";
-import { createRequest, getMyRequests, updateRequest, cancelRequest } from "../api/requestApi";
+import { createRequest, getMyRequests, getRequestById, updateRequest, cancelRequest, getCreateRequestForm } from "../api/requestApi";
 
 const STATUS_INFO = {
     NEW: { label: "Новая", color: "info", description: "Заявка создана." },
@@ -152,65 +150,44 @@ function getEntityName(entity, fallback = "") {
     ].filter(Boolean).join(" · ") || fallback;
 }
 
-function getReadableAddress(request, user, cities, streets, houses) {
-    const embeddedAddress = request.addressDetails || request.address || request.addressInfo;
+function getReadableAddress(request) {
+    // Квартира может приходить отдельным полем request.apartment,
+    // а адрес — объектом address. Проверяем оба варианта ответа backend.
+    const address = request.address;
+    const apartmentValue = address && typeof address === "object"
+        ? (address.apartment ?? request.apartment)
+        : request.apartment;
+    const apartment = apartmentValue != null && String(apartmentValue).trim()
+        ? `кв. ${String(apartmentValue).trim()}`
+        : null;
 
-    if (embeddedAddress && typeof embeddedAddress === "object") {
+    if (address && typeof address === "object") {
         const parts = [
-            embeddedAddress.cityName || embeddedAddress.city?.name || embeddedAddress.city,
-            embeddedAddress.streetName || embeddedAddress.street?.name || embeddedAddress.street,
-            embeddedAddress.houseNumber || embeddedAddress.house?.number || embeddedAddress.house?.houseNumber,
-            embeddedAddress.apartment ? `кв. ${embeddedAddress.apartment}` : null,
+            address.cityName || address.city?.name || address.city,
+            address.streetName || address.street?.name || address.street,
+            address.houseNumber || address.house?.number || address.house?.houseNumber,
+            apartment,
         ].filter((part) => part && typeof part !== "object");
-
         if (parts.length) return parts.join(", ");
     }
 
-    if (typeof request.address === "string" && request.address.trim()) {
-        return request.address;
+    if (typeof address === "string" && address.trim()) {
+        return [address.trim(), apartment].filter(Boolean).join(", ");
     }
-
-    if (request.addressName || request.fullAddress) {
-        return request.fullAddress || request.addressName;
-    }
-
-    // В заявке хранится ID дома. Для клиентской заявки адрес обычно совпадает
-    // с адресом, указанным в профиле клиента.
-    const requestAddressId = request.addressId ?? request.houseId;
-    if (user?.houseId != null && String(requestAddressId) === String(user.houseId)) {
-        const city = cities.find((item) => String(item.id) === String(user.cityId));
-        const street = streets.find((item) => String(item.id) === String(user.streetId));
-        const house = houses.find((item) => String(item.id) === String(user.houseId));
-        const houseNumber = house?.number || house?.houseNumber || house?.name;
-        const parts = [
-            city?.name || user.cityName || user.city,
-            street?.name || user.streetName || user.street,
-            houseNumber ? `д. ${houseNumber}` : null,
-            user.apartment ? `кв. ${user.apartment}` : null,
-        ].filter(Boolean);
-
-        if (parts.length) return parts.join(", ");
-    }
-
-    return requestAddressId ? `Адрес не удалось определить (ID: ${requestAddressId})` : "Адрес не указан";
+    const fallback = request.addressId ? `ID адреса: ${request.addressId}` : "Адрес не предоставлен backend";
+    return [fallback, apartment].filter(Boolean).join(", ");
 }
 
-function getReadableEquipment(request, equipment) {
-    const embeddedEquipment = request.equipmentDetails || request.equipment;
-    if (embeddedEquipment && typeof embeddedEquipment === "object") {
-        const name = getEntityName(embeddedEquipment);
-        if (name) return name;
+function getReadableEquipment(request) {
+    // Не ищем оборудование в профиле или стороннем справочнике.
+    const equipment = request.equipment;
+    if (!equipment || typeof equipment !== "object") {
+        return request.equipmentId ? `ID оборудования: ${request.equipmentId}` : "Оборудование не предоставлено backend";
     }
 
-    if (request.equipmentName) return request.equipmentName;
-
-    const equipmentId = request.equipmentId;
-    const item = equipment.find((entry) => String(entry.id) === String(equipmentId));
-    if (item) {
-        return getEntityName(item, `Оборудование ${equipmentId}`);
-    }
-
-    return equipmentId ? `Оборудование не удалось определить (ID: ${equipmentId})` : "Оборудование не указано";
+    const typeName = equipment.equipmentTypeName;
+    const model = equipment.model;
+    return [typeName, model].filter(Boolean).join(" ") || "Оборудование не предоставлено backend";
 }
 
 function workflowIndex(status) {
@@ -255,7 +232,7 @@ function RequestWorkflow({ status }) {
     );
 }
 
-function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy, user, cities, streets, houses, equipment }) {
+function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
     if (!request) return null;
 
     const info = statusInfo(request.status);
@@ -314,7 +291,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy, user, 
                                 Адрес
                             </Typography>
                             <Typography sx={{ overflowWrap: "anywhere" }}>
-                                {getReadableAddress(request, user, cities, streets, houses)}
+                                {getReadableAddress(request)}
                             </Typography>
                         </Grid>
 
@@ -323,7 +300,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy, user, 
                                 Оборудование
                             </Typography>
                             <Typography sx={{ overflowWrap: "anywhere" }}>
-                                {getReadableEquipment(request, equipment)}
+                                {getReadableEquipment(request)}
                             </Typography>
                         </Grid>
 
@@ -332,7 +309,16 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy, user, 
                                 Мастер
                             </Typography>
                             <Typography sx={{ overflowWrap: "anywhere" }}>
-                                {request.masterId || "Пока не назначен"}
+                                {request.master
+                                    ? [
+                                        [request.master.lastName, request.master.firstName, request.master.middleName]
+                                            .filter(Boolean)
+                                            .join(" "),
+                                        request.master.phone ? `Телефон: ${request.master.phone}` : null,
+                                    ]
+                                        .filter(Boolean)
+                                        .join("\n")
+                                    : "Пока не назначен"}
                             </Typography>
                         </Grid>
                     </Grid>
@@ -412,6 +398,44 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy, user, 
     );
 }
 
+function getRequestErrorMessage(error, preferredVisitAt = "") {
+    const data = error?.response?.data;
+    const validationErrors = data?.validationErrors || data?.errors;
+
+    if (validationErrors && typeof validationErrors === "object") {
+        const messages = Object.entries(validationErrors).map(([field, message]) => {
+            const fieldName = {
+                addressId: "Адрес",
+                equipmentId: "Оборудование",
+                problemDescription: "Описание проблемы",
+                clientComment: "Комментарий",
+                preferredVisitAt: "Дата и время визита",
+                apartment: "Квартира",
+            }[field] || field;
+            return `${fieldName}: ${Array.isArray(message) ? message.join("; ") : message}`;
+        }).filter(Boolean);
+        if (messages.length) return messages.join("\n");
+    }
+
+    const raw = String(data?.message || data?.detail || error?.message || "").toLowerCase();
+    if (raw.includes("preferredvisitat") || raw.includes("visit") || raw.includes("время") || raw.includes("дат") || raw.includes("future")) {
+        return "Некорректная дата или время визита. Выберите дату и время в будущем либо оставьте поле пустым.";
+    }
+    if (raw.includes("equipmentid") || raw.includes("equipment") || raw.includes("оборудован")) {
+        return "Не выбрано оборудование или оно недоступно. Выберите оборудование из списка.";
+    }
+    if (raw.includes("addressid") || raw.includes("address") || raw.includes("адрес")) {
+        return "Не выбран адрес обслуживания. Выберите адрес из списка.";
+    }
+    if (raw.includes("problemdescription") || raw.includes("description") || raw.includes("описан")) {
+        return "Проверьте описание проблемы: поле обязательно для заполнения.";
+    }
+    if (raw.includes("validation") || raw.includes("валидац") || raw.includes("bad request")) {
+        return "Проверьте заполненные поля: адрес, оборудование и описание проблемы. Дата визита, если указана, должна быть в будущем.";
+    }
+    return data?.message || data?.detail || "Не удалось выполнить запрос. Проверьте заполненные поля и попробуйте ещё раз.";
+}
+
 export default function MyRequestsPage() {
     const [user, setUser] = useState(null);
     const [requests, setRequests] = useState([]);
@@ -432,20 +456,21 @@ export default function MyRequestsPage() {
 
     const [createOpen, setCreateOpen] = useState(false);
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState("");
+    const [createFieldErrors, setCreateFieldErrors] = useState({});
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
     const [form, setForm] = useState({
         addressId: "",
+        apartment: "",
         equipmentId: "",
         problemDescription: "",
         clientComment: "",
         preferredVisitAt: "",
     });
 
-    const [cities, setCities] = useState([]);
-    const [streets, setStreets] = useState([]);
-    const [houses, setHouses] = useState([]);
+    const [createAddress, setCreateAddress] = useState(null);
     const [equipment, setEquipment] = useState([]);
     const [formDataLoading, setFormDataLoading] = useState(false);
 
@@ -458,58 +483,38 @@ export default function MyRequestsPage() {
             setLoading(true);
         }
 
-        try {
-            // Загружаем профиль отдельно: ошибка request-service
-            // не должна скрывать пользователя и сайдбар.
-            const profile = await getCurrentProfile();
-            setUser(profile);
+        // Профиль и заявки загружаются независимо. Ошибка Request Service
+        // не должна сбрасывать авторизованного пользователя в Guest.
+        const profilePromise = getCurrentProfile()
+            .then((profile) => {
+                if (profile) setUser(profile);
+                return profile;
+            })
+            .catch((profileError) => {
+                console.error("Ошибка загрузки профиля:", profileError);
+                return null;
+            });
 
-            // Справочники нужны для отображения названий вместо ID в карточке заявки.
-            // Их ошибка не должна блокировать загрузку самого списка заявок.
-            try {
-                const [cityList, equipmentList] = await Promise.all([
-                    getAllCities(),
-                    getMyEquipment(),
-                ]);
-                setCities(Array.isArray(cityList) ? cityList : []);
-                setEquipment(Array.isArray(equipmentList) ? equipmentList : []);
-
-                if (profile?.cityId) {
-                    const streetList = await getStreetsByCity(profile.cityId);
-                    setStreets(Array.isArray(streetList) ? streetList : []);
-                } else {
-                    setStreets([]);
+        const requestsPromise = getMyRequests()
+            .then((requestList) => {
+                if (Array.isArray(requestList)) {
+                    setRequests(requestList);
+                    return true;
                 }
-
-                if (profile?.streetId) {
-                    const houseList = await getHousesByStreet(profile.streetId);
-                    setHouses(Array.isArray(houseList) ? houseList : []);
-                } else {
-                    setHouses([]);
-                }
-            } catch (referenceError) {
-                console.error("Не удалось загрузить справочники адресов и оборудования:", referenceError);
-            }
-        } catch (e) {
-            console.error("Ошибка загрузки профиля:", e);
-            setError(
-                e.response?.data?.message ||
-                "Не удалось загрузить профиль. Проверь авторизацию и user-service."
-            );
-            setLoading(false);
-            setRefreshing(false);
-            return;
-        }
+                throw new Error("Request Service вернул некорректный список заявок.");
+            })
+            .catch((requestsError) => {
+                console.error("Ошибка загрузки заявок:", requestsError);
+                setError(
+                    requestsError.message ||
+                    "Не удалось загрузить заявки. Проверь доступность Request Service."
+                );
+                // Не обнуляем уже показанные заявки при сетевой ошибке.
+                return false;
+            });
 
         try {
-            const requestList = await getMyRequests();
-            setRequests(Array.isArray(requestList) ? requestList : []);
-        } catch (e) {
-            console.error("Ошибка загрузки заявок:", e);
-            setError(
-                e.response?.data?.message ||
-                "Не удалось загрузить заявки. Проверь доступность request-service."
-            );
+            await Promise.all([profilePromise, requestsPromise]);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -555,6 +560,26 @@ export default function MyRequestsPage() {
         return localDate.toISOString().slice(0, 16);
     };
 
+    const openRequest = async (request) => {
+        // Краткий ответ /requests/my нужен только для списка.
+        // Все поля открытой карточки берём исключительно из GET /requests/{id}.
+        setSelectedRequest({ id: request.id, _loading: true });
+
+        try {
+            const details = await getRequestById(request.id);
+            if (!details || typeof details !== "object") {
+                throw new Error("Backend не вернул подробности заявки.");
+            }
+            setSelectedRequest(details);
+        } catch (e) {
+            console.error("Не удалось загрузить подробности заявки:", e);
+            setSelectedRequest({
+                id: request.id,
+                _loadError: e.message || "Не удалось загрузить карточку заявки.",
+            });
+        }
+    };
+
     const openEditDialog = (request) => {
         if (!request || request.status === "ACCEPTED") return;
 
@@ -571,8 +596,8 @@ export default function MyRequestsPage() {
     const handleEdit = async () => {
         if (!selectedRequest || selectedRequest.status === "ACCEPTED") return;
 
-        if (!editForm.problemDescription.trim()) {
-            setEditError("Заполните описание проблемы.");
+        if (editForm.problemDescription.trim().length < 5) {
+            setEditError("Описание проблемы должно содержать минимум 5 символов.");
             return;
         }
 
@@ -612,24 +637,7 @@ export default function MyRequestsPage() {
         } catch (e) {
             console.error("Ошибка редактирования заявки:", e);
 
-            const responseData = e.response?.data;
-            const validationErrors = responseData?.validationErrors;
-
-            const validationMessage = validationErrors
-                ? Object.values(validationErrors).filter(Boolean).join(" ")
-                : "";
-
-            const serverMessage = responseData?.message || e.message || "";
-
-            setEditError(
-                validationMessage ||
-                (serverMessage === "Ошибка валидации входных данных" &&
-                editForm.preferredVisitAt &&
-                new Date(editForm.preferredVisitAt).getTime() <= Date.now()
-                    ? "Желаемое время визита должно быть в будущем. Выберите будущую дату и время."
-                    : serverMessage) ||
-                "Не удалось изменить заявку."
-            );
+            setEditError(getRequestErrorMessage(e, editForm.preferredVisitAt));
         } finally {
             setEditing(false);
         }
@@ -675,46 +683,45 @@ export default function MyRequestsPage() {
 
     const openCreateDialog = async () => {
         setError("");
+        setCreateError("");
+        setCreateFieldErrors({});
         setSuccess("");
-
+        setFormDataLoading(true);
+        setCreateAddress(null);
+        setEquipment([]);
         setForm({
-            addressId: user?.houseId ? String(user.houseId) : "",
+            addressId: "",
+            apartment: "",
             equipmentId: "",
             problemDescription: "",
             clientComment: "",
             preferredVisitAt: "",
         });
-
         setCreateOpen(true);
-        setFormDataLoading(true);
 
         try {
-            const [cityList, equipmentList] = await Promise.all([
-                getAllCities(),
-                getMyEquipment(),
-            ]);
+            // Единственный запрос для данных формы создания заявки.
+            const data = await getCreateRequestForm();
+            const address = data?.address;
 
-            setCities(Array.isArray(cityList) ? cityList : []);
-            setEquipment(Array.isArray(equipmentList) ? equipmentList : []);
-
-            if (user?.cityId) {
-                const streetList = await getStreetsByCity(user.cityId);
-                setStreets(Array.isArray(streetList) ? streetList : []);
-            } else {
-                setStreets([]);
+            if (!data?.client || !address || address.houseId == null) {
+                throw new Error("Request Service вернул неполные данные формы создания заявки.");
             }
 
-            if (user?.streetId) {
-                const houseList = await getHousesByStreet(user.streetId);
-                setHouses(Array.isArray(houseList) ? houseList : []);
-            } else {
-                setHouses([]);
-            }
+            // Авторизованный пользователь берётся из user-service, не из формы заявки.
+            setCreateAddress(address);
+            setEquipment(Array.isArray(data.equipment) ? data.equipment : []);
+            setForm((previous) => ({
+                ...previous,
+                addressId: String(address.houseId),
+                // Квартира берётся именно из блока address ответа create-form.
+                apartment: address.apartment == null ? "" : String(address.apartment),
+            }));
         } catch (e) {
-            console.error("Ошибка загрузки данных формы заявки:", e);
+            console.error("Ошибка загрузки формы заявки:", e);
             setError(
-                e.response?.data?.message ||
-                "Не удалось загрузить адрес профиля или оборудование. Проверь address-service и equipment-service."
+                e.message ||
+                "Не удалось загрузить данные для создания заявки."
             );
         } finally {
             setFormDataLoading(false);
@@ -722,26 +729,38 @@ export default function MyRequestsPage() {
     };
 
     const handleCreate = async () => {
-        setError("");
+        setCreateError("");
+        setCreateFieldErrors({});
         setSuccess("");
 
-        if (!form.addressId) {
-            setError("Выбери адрес, по которому требуется обслуживание.");
+        const validationErrors = {};
+        if (!form.addressId) validationErrors.addressId = "Выберите адрес обслуживания.";
+        if (!form.equipmentId) validationErrors.equipmentId = "Выберите оборудование для заявки.";
+        if (form.problemDescription.trim().length < 5) {
+            validationErrors.problemDescription = "Описание проблемы должно содержать минимум 5 символов.";
+        }
+
+        if (form.preferredVisitAt) {
+            const visitDate = new Date(form.preferredVisitAt);
+            if (Number.isNaN(visitDate.getTime())) {
+                validationErrors.preferredVisitAt = "Укажите корректную дату и время визита.";
+            } else if (visitDate.getTime() <= Date.now()) {
+                validationErrors.preferredVisitAt = "Выберите дату и время в будущем либо оставьте поле пустым.";
+            }
+        }
+
+        if (Object.keys(validationErrors).length > 0) {
+            setCreateFieldErrors(validationErrors);
             return;
         }
 
-        if (!form.equipmentId) {
-            setError("Выбери оборудование, для которого создаётся заявка.");
-            return;
-        }
-
-        if (!form.problemDescription.trim()) {
-            setError("Заполни описание проблемы.");
-            return;
-        }
+        const apartment = createAddress?.apartment == null
+            ? null
+            : String(createAddress.apartment).trim() || null;
 
         const payload = {
             addressId: form.addressId,
+            apartment,
             equipmentId: form.equipmentId,
             problemDescription: form.problemDescription.trim(),
             clientComment: form.clientComment.trim() || null,
@@ -766,10 +785,52 @@ export default function MyRequestsPage() {
         } catch (e) {
             console.error("Ошибка создания заявки:", e);
 
-            setError(
-                e.response?.data?.message ||
-                "Не удалось создать заявку. Проверь данные и доступность backend."
-            );
+            const data = e?.response?.data;
+            const backendErrors = data?.validationErrors || data?.errors;
+            const fieldMap = {
+                addressId: "addressId",
+                equipmentId: "equipmentId",
+                problemDescription: "problemDescription",
+                clientComment: "clientComment",
+                preferredVisitAt: "preferredVisitAt",
+                apartment: "apartment",
+            };
+            const mappedErrors = {};
+
+            if (backendErrors && typeof backendErrors === "object") {
+                Object.entries(backendErrors).forEach(([field, message]) => {
+                    const mappedField = fieldMap[field] || fieldMap[field?.toLowerCase()];
+                    const text = Array.isArray(message) ? message.join("; ") : String(message || "");
+                    if (mappedField) mappedErrors[mappedField] = text;
+                });
+            }
+
+            const rawMessage = String(data?.message || data?.detail || e?.message || "").toLowerCase();
+            if (!mappedErrors.preferredVisitAt && (
+                rawMessage.includes("preferredvisitat") ||
+                rawMessage.includes("visit") ||
+                rawMessage.includes("время") ||
+                rawMessage.includes("дат") ||
+                rawMessage.includes("future")
+            )) {
+                mappedErrors.preferredVisitAt = "Некорректная дата или время визита. Выберите дату и время в будущем либо оставьте поле пустым.";
+            }
+            if (!mappedErrors.equipmentId && (rawMessage.includes("equipment") || rawMessage.includes("оборудован"))) {
+                mappedErrors.equipmentId = "Оборудование не выбрано или недоступно. Проверьте выбранное оборудование.";
+            }
+            if (!mappedErrors.addressId && (rawMessage.includes("address") || rawMessage.includes("адрес"))) {
+                mappedErrors.addressId = "Адрес обслуживания не выбран или недоступен. Проверьте адрес.";
+            }
+            if (!mappedErrors.problemDescription && (rawMessage.includes("problemdescription") || rawMessage.includes("description") || rawMessage.includes("описан"))) {
+                mappedErrors.problemDescription = "Описание проблемы должно содержать минимум 5 символов.";
+            }
+
+            if (Object.keys(mappedErrors).length > 0) {
+                setCreateFieldErrors(mappedErrors);
+                setCreateError("Проверьте поля, отмеченные ниже.");
+            } else {
+                setCreateError(data?.message || data?.detail || "Не удалось создать заявку. Проверьте данные и попробуйте ещё раз.");
+            }
         } finally {
             setCreating(false);
         }
@@ -999,13 +1060,13 @@ export default function MyRequestsPage() {
                             return (
                                 <Card
                                     key={request.id}
-                                    onClick={() => setSelectedRequest(request)}
+                                    onClick={() => openRequest(request)}
                                     role="button"
                                     tabIndex={0}
                                     onKeyDown={(event) => {
                                         if (event.key === "Enter" || event.key === " ") {
                                             event.preventDefault();
-                                            setSelectedRequest(request);
+                                            openRequest(request);
                                         }
                                     }}
                                     sx={{
@@ -1022,23 +1083,21 @@ export default function MyRequestsPage() {
                                 >
                                     <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                                         <Stack
-                                            direction={{ xs: "column", md: "row" }}
+                                            direction={{ xs: "column", sm: "row" }}
                                             justifyContent="space-between"
-                                            alignItems={{ xs: "stretch", md: "flex-start" }}
+                                            alignItems={{ xs: "flex-start", sm: "center" }}
                                             spacing={2}
                                         >
-                                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            <Stack spacing={1.25} sx={{ minWidth: 0, flex: 1 }}>
                                                 <Stack
                                                     direction="row"
+                                                    spacing={1}
                                                     alignItems="center"
                                                     flexWrap="wrap"
-                                                    gap={1}
-                                                    mb={1}
                                                 >
-                                                    <Typography fontWeight={800}>
-                                                        Заявка № {String(request.id).slice(0, 8)}
+                                                    <Typography fontWeight={800} sx={{ overflowWrap: "anywhere" }}>
+                                                        Заявка № {String(request.requestNumber ?? request.number ?? request.id).slice(0, 8)}
                                                     </Typography>
-
                                                     <Chip
                                                         label={info.label}
                                                         color={info.color}
@@ -1046,78 +1105,54 @@ export default function MyRequestsPage() {
                                                     />
                                                 </Stack>
 
-                                                <Typography
-                                                    sx={{
-                                                        whiteSpace: "pre-wrap",
-                                                        overflowWrap: "anywhere",
-                                                        mb: 2,
-                                                    }}
-                                                >
-                                                    {request.problemDescription}
-                                                </Typography>
-
-                                                <Stack
-                                                    direction={{ xs: "column", sm: "row" }}
-                                                    spacing={{ xs: 1, sm: 3 }}
-                                                    flexWrap="wrap"
-                                                >
-                                                    <Stack
-                                                        direction="row"
-                                                        spacing={1}
-                                                        alignItems="center"
-                                                    >
-                                                        <AccessTimeIcon
-                                                            fontSize="small"
-                                                            color="action"
-                                                        />
-                                                        <Typography
-                                                            variant="body2"
-                                                            color="text.secondary"
-                                                        >
-                                                            Создана: {formatDate(request.createdAt)}
-                                                        </Typography>
-                                                    </Stack>
-
-                                                    <Typography
-                                                        variant="body2"
-                                                        color="text.secondary"
-                                                    >
-                                                        Визит: {formatDate(request.preferredVisitAt)}
+                                                <Stack direction="row" spacing={1} alignItems="center">
+                                                    <AccessTimeIcon fontSize="small" color="action" />
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Создана: {formatDate(request.createdAt)}
                                                     </Typography>
                                                 </Stack>
+                                            </Stack>
 
-                                                <Grid container spacing={1.5} sx={{ mt: 1 }}>
-                                                    <Grid size={{ xs: 12, sm: 6 }}>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Адрес обслуживания
-                                                        </Typography>
-                                                        <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                                                            {getReadableAddress(request, user, cities, streets, houses)}
-                                                        </Typography>
-                                                    </Grid>
-                                                    <Grid size={{ xs: 12, sm: 6 }}>
-                                                        <Typography variant="caption" color="text.secondary">
-                                                            Оборудование
-                                                        </Typography>
-                                                        <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
-                                                            {getReadableEquipment(request, equipment)}
-                                                        </Typography>
-                                                    </Grid>
-                                                </Grid>
+                                        </Stack>
 
-                                                <Box sx={{ mt: 2 }}>
-                                                    <RequestWorkflow status={request.status} />
-                                                </Box>
-                                            </Box>
-
-                                            <Typography
-                                                variant="body2"
-                                                color="primary.main"
-                                                fontWeight={600}
-                                                sx={{ flexShrink: 0, alignSelf: { xs: "flex-start", md: "center" } }}
+                                        <Divider sx={{ my: 2 }} />
+                                        <Stack
+                                            direction={{ xs: "column", md: "row" }}
+                                            alignItems="stretch"
+                                            spacing={2}
+                                        >
+                                            <Box
+                                                sx={{
+                                                    flex: 1,
+                                                    minWidth: 0,
+                                                    border: "1px solid",
+                                                    borderColor: "divider",
+                                                    borderRadius: 2,
+                                                    backgroundColor: "background.default",
+                                                    p: { xs: 1.5, md: 2 },
+                                                    overflow: "hidden",
+                                                }}
                                             >
-                                                Нажмите, чтобы открыть
-                                            </Typography>
+                                                <RequestWorkflow status={request.status} />
+                                            </Box>
+                                            <Box
+                                                sx={{
+                                                    minWidth: { xs: "auto", md: 180 },
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    px: { xs: 0, md: 1 },
+                                                }}
+                                            >
+                                                <Typography
+                                                    variant="body2"
+                                                    color="primary.main"
+                                                    fontWeight={600}
+                                                    sx={{ textAlign: "center" }}
+                                                >
+                                                    Нажмите, чтобы открыть
+                                                </Typography>
+                                            </Box>
                                         </Stack>
                                     </CardContent>
                                 </Card>
@@ -1145,6 +1180,11 @@ export default function MyRequestsPage() {
 
                 <DialogContent>
                     <Stack spacing={2.5} sx={{ pt: 1 }}>
+                        {createError && (
+                            <Alert severity="error" onClose={() => setCreateError("")}>
+                                {createError}
+                            </Alert>
+                        )}
                         <Typography variant="subtitle2" fontWeight={700}>
                             Контактные данные
                         </Typography>
@@ -1207,8 +1247,7 @@ export default function MyRequestsPage() {
                             label="Город"
                             fullWidth
                             value={
-                                cities.find((item) => String(item.id) === String(user?.cityId))?.name
-                                || "Не указан в профиле"
+                                createAddress?.cityName || createAddress?.city?.name || createAddress?.city || "Не указан"
                             }
                             slotProps={{ input: { readOnly: true } }}
                             sx={{
@@ -1221,8 +1260,7 @@ export default function MyRequestsPage() {
                             label="Улица"
                             fullWidth
                             value={
-                                streets.find((item) => String(item.id) === String(user?.streetId))?.name
-                                || "Не указана в профиле"
+                                createAddress?.streetName || createAddress?.street?.name || createAddress?.street || "Не указана"
                             }
                             slotProps={{ input: { readOnly: true } }}
                             sx={{
@@ -1235,24 +1273,35 @@ export default function MyRequestsPage() {
                             label="Дом"
                             required
                             fullWidth
-                            value={(() => {
-                                const house = houses.find(
-                                    (item) => String(item.id) === String(user?.houseId)
-                                );
-                                return house
-                                    ? house.number || house.houseNumber || house.name || `Дом ${user.houseId}`
-                                    : "Не указан в профиле";
-                            })()}
+                            value={
+                                createAddress?.houseNumber ||
+                                createAddress?.house?.number ||
+                                createAddress?.house?.houseNumber ||
+                                createAddress?.house?.name ||
+                                (createAddress?.houseId != null ? `Дом ${createAddress.houseId}` : "Не указан")
+                            }
                             slotProps={{ input: { readOnly: true } }}
                             sx={{
                                 "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
                                 "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
                             }}
                             helperText={
-                                user?.houseId
-                                    ? "Адрес автоматически взят из вашего профиля."
-                                    : "Сначала укажите адрес в разделе «Профиль»."
+                                createAddress?.houseId != null
+                                    ? "Адрес получен из Request Service."
+                                    : "Адрес не получен. Проверьте данные профиля."
                             }
+                        />
+
+                        <TextField
+                            label="Квартира"
+                            fullWidth
+                            value={form.apartment || "Не указана"}
+                            slotProps={{ input: { readOnly: true } }}
+                            sx={{
+                                "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
+                                "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                            }}
+                            helperText="Квартира подставлена из адреса, полученного от Request Service."
                         />
 
                         <TextField
@@ -1262,23 +1311,24 @@ export default function MyRequestsPage() {
                             fullWidth
                             value={form.equipmentId}
                             disabled={formDataLoading}
-                            onChange={(event) =>
+                            error={Boolean(createFieldErrors.equipmentId)}
+                            onChange={(event) => {
+                                setCreateFieldErrors((previous) => ({ ...previous, equipmentId: "" }));
+                                setCreateError("");
                                 setForm((previous) => ({
                                     ...previous,
                                     equipmentId: event.target.value,
-                                }))
-                            }
-                            helperText="Обязательно выберите оборудование для этой заявки."
+                                }));
+                            }}
+                            helperText={createFieldErrors.equipmentId || "Обязательно. Если оборудование не отображается, проверьте его наличие в профиле/адресе."}
                         >
                             <MenuItem value="" disabled>Выберите оборудование</MenuItem>
                             {equipment.map((item) => (
                                 <MenuItem key={item.id} value={String(item.id)}>
                                     {[
-                                        item.name,
-                                        item.equipmentTypeName,
-                                        item.typeName,
-                                        item.serialNumber ? `№ ${item.serialNumber}` : null,
-                                    ].filter(Boolean).join(" · ") || `Оборудование ${String(item.id).slice(0, 8)}`}
+                                        item.equipmentTypeName || item.typeName,
+                                        item.model,
+                                    ].filter(Boolean).join(" ") || `Оборудование ${String(item.id).slice(0, 8)}`}
                                 </MenuItem>
                             ))}
                         </TextField>
@@ -1298,13 +1348,16 @@ export default function MyRequestsPage() {
                             fullWidth
                             value={form.problemDescription}
                             inputProps={{ maxLength: 5000 }}
-                            helperText={`${form.problemDescription.length}/5000`}
-                            onChange={(event) =>
+                            error={Boolean(createFieldErrors.problemDescription)}
+                            helperText={createFieldErrors.problemDescription || `${form.problemDescription.length}/5000. Минимум 5 символов: опишите неисправность и что происходит.`}
+                            onChange={(event) => {
+                                setCreateFieldErrors((previous) => ({ ...previous, problemDescription: "" }));
+                                setCreateError("");
                                 setForm((previous) => ({
                                     ...previous,
                                     problemDescription: event.target.value,
-                                }))
-                            }
+                                }));
+                            }}
                         />
 
                         <TextField
@@ -1316,12 +1369,13 @@ export default function MyRequestsPage() {
                             value={form.clientComment}
                             inputProps={{ maxLength: 2000 }}
                             helperText={`${form.clientComment.length}/2000`}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                                setCreateError("");
                                 setForm((previous) => ({
                                     ...previous,
                                     clientComment: event.target.value,
-                                }))
-                            }
+                                }));
+                            }}
                         />
 
                         <TextField
@@ -1329,6 +1383,7 @@ export default function MyRequestsPage() {
                             type="datetime-local"
                             fullWidth
                             value={form.preferredVisitAt}
+                            error={Boolean(createFieldErrors.preferredVisitAt)}
                             variant="outlined"
                             InputLabelProps={{ shrink: true }}
                             slotProps={{
@@ -1339,13 +1394,15 @@ export default function MyRequestsPage() {
                                     ).toISOString().slice(0, 16),
                                 },
                             }}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                                setCreateFieldErrors((previous) => ({ ...previous, preferredVisitAt: "" }));
+                                setCreateError("");
                                 setForm((previous) => ({
                                     ...previous,
                                     preferredVisitAt: event.target.value,
-                                }))
-                            }
-                            helperText="Необязательно. Укажите удобные дату и время."
+                                }));
+                            }}
+                            helperText={createFieldErrors.preferredVisitAt || "Необязательно. Если указали дату, она должна быть в будущем. Прошедшее время backend отклонит."}
                         />
                     </Stack>
                 </DialogContent>
@@ -1366,7 +1423,7 @@ export default function MyRequestsPage() {
                         onClick={handleCreate}
                         disabled={
                             creating ||
-                            !form.problemDescription.trim() ||
+                            form.problemDescription.trim().length < 5 ||
                             !form.addressId ||
                             !form.equipmentId ||
                             formDataLoading
@@ -1384,11 +1441,6 @@ export default function MyRequestsPage() {
                 onEdit={() => openEditDialog(selectedRequest)}
                 onCancel={() => setCancelTarget(selectedRequest)}
                 busy={editing || cancelling}
-                user={user}
-                cities={cities}
-                streets={streets}
-                houses={houses}
-                equipment={equipment}
             />
 
             {/* Редактирование заявки */}
@@ -1409,6 +1461,11 @@ export default function MyRequestsPage() {
 
                 <DialogContent>
                     <Stack spacing={2.5} sx={{ pt: 1 }}>
+                        {createError && (
+                            <Alert severity="error" onClose={() => setCreateError("")}>
+                                {createError}
+                            </Alert>
+                        )}
                         {editError && (
                             <Alert severity="error" onClose={() => setEditError("")}>
                                 {editError}
@@ -1424,7 +1481,8 @@ export default function MyRequestsPage() {
                             fullWidth
                             value={editForm.problemDescription}
                             inputProps={{ maxLength: 5000 }}
-                            helperText={`${editForm.problemDescription.length}/5000`}
+                            error={Boolean(editError) && editForm.problemDescription.trim().length < 5}
+                            helperText={`${editForm.problemDescription.length}/5000. Минимум 5 символов.`}
                             onChange={(event) => {
                                 setEditError("");
                                 setEditForm((previous) => ({
@@ -1472,7 +1530,7 @@ export default function MyRequestsPage() {
                                     preferredVisitAt: event.target.value,
                                 }));
                             }}
-                            helperText="Необязательно. Можно оставить время без изменений."
+                            helperText="Необязательно. Новая дата и время должны быть в будущем; прошедшее время backend отклонит."
                         />
                     </Stack>
                 </DialogContent>
@@ -1490,7 +1548,7 @@ export default function MyRequestsPage() {
                     <Button
                         variant="contained"
                         onClick={handleEdit}
-                        disabled={editing || !editForm.problemDescription.trim()}
+                        disabled={editing || editForm.problemDescription.trim().length < 5}
                         startIcon={editing ? <CircularProgress size={18} /> : <EditOutlinedIcon />}
                     >
                         {editing ? "Сохранение..." : "Сохранить изменения"}
