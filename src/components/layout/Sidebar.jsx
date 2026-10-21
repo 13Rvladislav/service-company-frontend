@@ -48,10 +48,12 @@ export default function Sidebar({ user }) {
     isSpecializationsPage ||
     location.pathname.startsWith("/zones/assign");
 
+  const isDispatcherZonesPage = location.pathname.startsWith("/zones/assign");
+
   const [locationsOpen, setLocationsOpen] = useState(isLocationsPage);
   const [equipmentOpen, setEquipmentOpen] = useState(isEquipmentPage);
   const [specializationsOpen, setSpecializationsOpen] =
-    useState(isAdminMastersPage);
+    useState(isAdminMastersPage || isDispatcherZonesPage);
 
   const mainItemSx = {
     minHeight: 44,
@@ -282,15 +284,24 @@ export default function Sidebar({ user }) {
   // Диспетчер: сохраняем исходную группу и её пункты.
   const renderDispatcherSpecializations = () =>
     renderGroup({
-      title: "Специализации",
+      title: "Управление мастерами",
       Icon: EngineeringOutlinedIcon,
       open: specializationsOpen,
       onToggle: () => setSpecializationsOpen((prev) => !prev),
-      active: isSpecializationsPage,
-      children: renderNestedItem(
-        "/specializations/assign",
-        "Назначение мастерам",
-        AssignmentIndOutlinedIcon
+      active: isSpecializationsPage || isDispatcherZonesPage,
+      children: (
+        <>
+          {renderNestedItem(
+            "/specializations/assign",
+            "Назначение специализаций",
+            AssignmentIndOutlinedIcon
+          )}
+          {renderNestedItem(
+            "/zones/assign",
+            "Назначение зон",
+            MapOutlinedIcon
+          )}
+        </>
       ),
     });
 

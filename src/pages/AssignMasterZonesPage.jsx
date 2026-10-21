@@ -126,7 +126,7 @@ export default function AssignMasterZonesPage() {
     severity: "success",
   });
 
-  const isAllowed = user?.role === "ADMIN";
+  const isAllowed = user?.role === "ADMIN" || user?.role === "DISPATCHER";
 
   const showNotice = useCallback((message, severity = "success") => {
     setNotice({
@@ -145,7 +145,7 @@ export default function AssignMasterZonesPage() {
       const profile = await getCurrentProfile();
       setUser(profile);
 
-      if (profile?.role !== "ADMIN") {
+      if (profile?.role !== "ADMIN" && profile?.role !== "DISPATCHER") {
         setMasters([]);
         setZones([]);
         return;
@@ -335,7 +335,7 @@ export default function AssignMasterZonesPage() {
       <MainLayout user={user}>
         <Alert severity="error">
           У вас нет доступа к назначению зон мастерам. Эта страница доступна
-          только администратору.
+          только диспетчеру и администратору.
         </Alert>
       </MainLayout>
     );
