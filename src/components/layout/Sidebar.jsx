@@ -334,16 +334,16 @@ export default function Sidebar({ user }) {
     </>
   );
 
-  const renderEngineerMenu = () => (
-    <>
-      <SectionTitle>ОБЩЕЕ</SectionTitle>
-      {renderItem("/dashboard", "Главная", DashboardOutlinedIcon, true)}
-      {renderItem("/profile", "Профиль", PersonOutlineOutlinedIcon)}
+ const renderEngineerMenu = () => (
+  <>
+    <SectionTitle>ОБЩЕЕ</SectionTitle>
+    {renderItem("/dashboard", "Главная", DashboardOutlinedIcon, true)}
+    {renderItem("/profile", "Профиль", PersonOutlineOutlinedIcon)}
 
-      <SectionTitle>РАБОТА</SectionTitle>
-      {renderItem("/requests", "Мои заявки", AssignmentOutlinedIcon)}
-    </>
-  );
+    <SectionTitle>РАБОТА</SectionTitle>
+    {renderItem("/engineer-requests", "Мои заявки", AssignmentOutlinedIcon)}
+  </>
+);
 
   const renderClientMenu = () => (
     <>

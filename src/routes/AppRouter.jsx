@@ -1,4 +1,3 @@
-
 import {
   BrowserRouter,
   Routes,
@@ -20,6 +19,9 @@ import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
 import MyEquipmentPage from "../pages/MyEquipmentPage";
 import MyRequestsPage from "../pages/MyRequestsPage";
+
+// Отдельная страница управления заявками
+import RequestManagementPage from "../pages/RequestManagementPage";
 
 import SpecializationsPage from "../pages/SpecializationsPage";
 import SpecializationAssignmentPage from "../pages/SpecializationAssignmentPage";
@@ -45,6 +47,12 @@ export default function AppRouter() {
           {/* Заявки клиента */}
           <Route path="/my-requests" element={<MyRequestsPage />} />
 
+          {/* Управление заявками для ADMIN и DISPATCHER */}
+          <Route
+            path="/requests"
+            element={<RequestManagementPage />}
+          />
+
           {/* Локации */}
           <Route path="/addresses" element={<AddressesPage />} />
           <Route path="/zones" element={<ZonesPage />} />
@@ -53,12 +61,18 @@ export default function AppRouter() {
           <Route path="/users" element={<UsersPage />} />
 
           {/* Оборудование */}
-          <Route path="/equipment/types" element={<EquipmentTypesPage />} />
+          <Route
+            path="/equipment/types"
+            element={<EquipmentTypesPage />}
+          />
           <Route path="/equipment" element={<EquipmentPage />} />
           <Route path="/my-equipment" element={<MyEquipmentPage />} />
 
           {/* Специализации */}
-          <Route path="/specializations" element={<SpecializationsPage />} />
+          <Route
+            path="/specializations"
+            element={<SpecializationsPage />}
+          />
           <Route
             path="/specializations/assign"
             element={<SpecializationAssignmentPage />}

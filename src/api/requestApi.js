@@ -68,7 +68,21 @@ export async function getMyRequests() {
 }
 
 /**
+ * Получение всех заявок для администратора и диспетчера.
+ */
+export async function getAllRequests() {
+    const result = await requestApi("/requests/all");
+
+    if (Array.isArray(result)) {
+        return result;
+    }
+
+    return result?.content ?? result?.requests ?? result?.data ?? [];
+}
+
+/**
  * Получение одной заявки.
+ * Используется клиентом, администратором и диспетчером.
  */
 export function getRequestById(id) {
     return requestApi(`/requests/${encodeURIComponent(id)}`);
@@ -95,10 +109,44 @@ export function updateRequest(id, data) {
 }
 
 /**
- * Отмена заявки до её принятия.
+ * Отмена заявки клиентом до её принятия.
  */
 export function cancelRequest(id) {
     return requestApi(`/requests/${encodeURIComponent(id)}/cancel`, {
         method: "POST",
     });
+}
+
+/**
+ * Получение кандидатов на назначение мастера.
+ */
+export function getAssignmentCandidates(requestId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/assignment-candidates`
+    );
+}
+
+/**
+ * Назначение или переназначение мастера.
+ */
+export function assignMaster(requestId, masterId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/assign`,
+        {
+            method: "POST",
+            body: JSON.stringify({ masterId }),
+        }
+    );
+}
+
+/**
+ * Отмена заявки администратором или диспетчером.
+ */
+export function adminCancelRequest(requestId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/admin-cancel`,
+        {
+            method: "POST",
+        }
+    );
 }
