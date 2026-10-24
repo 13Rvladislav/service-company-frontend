@@ -15,6 +15,9 @@ import {
     Grid,
     MenuItem,
     Radio,
+    Step,
+    StepLabel,
+    Stepper,
     Stack,
     TextField,
     Typography,
@@ -41,6 +44,16 @@ import {
     assignMaster,
     adminCancelRequest,
 } from "../api/requestApi";
+
+const WORKFLOW = [
+    { status: "NEW", label: "Создана" },
+    { status: "WAITING_FOR_ASSIGNMENT", label: "Назначение" },
+    { status: "ASSIGNED", label: "Мастер назначен" },
+    { status: "ACCEPTED", label: "Принята" },
+    { status: "IN_PROGRESS", label: "В работе" },
+    { status: "REPORT_SUBMITTED", label: "Отчёт" },
+    { status: "COMPLETED", label: "Завершена" },
+];
 
 const STATUS_INFO = {
     NEW: {
@@ -155,36 +168,44 @@ function formatDate(value) {
  * Визуальная цепочка прохождения заявки.
  * Статусы берутся из фактического поля request.status.
  */
-function RequestWorkflow({ status, compact = false }) {
-    const stages = ["Создана", "Назначение", "Мастер назначен", "Принята", "В работе", "Отчёт", "Завершена"];
-    const terminal = ["CANCELLED", "REJECTED"].includes(status);
-    const currentStageByStatus = { NEW: 0, WAITING_FOR_ASSIGNMENT: 1, ASSIGNED: 2, ACCEPTED: 3, IN_PROGRESS: 4, REVISION_REQUIRED: 4, REPORT_SUBMITTED: 5, COMPLETED: 6 };
-    const currentIndex = currentStageByStatus[status] ?? 0;
+function workflowIndex(status) {
+    if (status === "REVISION_REQUIRED") return 5;
+    if (status === "CANCELLED" || status === "REJECTED") return -1;
 
-    if (terminal) return <Alert severity={status === "CANCELLED" ? "info" : "error"} sx={{ width: "100%" }}>{status === "CANCELLED" ? "Заявка отменена." : "Заявка отклонена."}</Alert>;
+    return WORKFLOW.findIndex((step) => step.status === status);
+}
+
+function RequestWorkflow({ status, compact = false }) {
+    const info = statusInfo(status);
+
+    if (status === "CANCELLED" || status === "REJECTED") {
+        return (
+            <Alert severity={status === "REJECTED" ? "error" : "info"}>
+                {info.description}
+            </Alert>
+        );
+    }
 
     return (
-        <Box sx={{ width: "100%", minWidth: 0 }}>
-            <Box sx={{ display: "flex", alignItems: "flex-start", width: "100%", overflowX: "auto", pb: 0.5 }}>
-                {stages.map((label, index) => {
-                    const done = index < currentIndex;
-                    const active = index === currentIndex;
-                    const reached = done || active;
-                    return (
-                        <Box key={label} sx={{ flex: "1 0 82px", minWidth: compact ? 68 : 82, textAlign: "center" }}>
-                            <Box sx={{ display: "flex", alignItems: "center", width: "100%", mb: 1 }}>
-                                {index > 0 && <Box sx={{ height: 2, flex: 1, bgcolor: index <= currentIndex ? "primary.main" : "divider" }} />}
-                                <Box sx={{ width: 20, height: 20, borderRadius: "50%", flex: "0 0 20px", display: "flex", alignItems: "center", justifyContent: "center", color: reached ? "primary.contrastText" : "text.secondary", bgcolor: reached ? "primary.main" : "action.disabledBackground", border: active ? "2px solid" : "none", borderColor: "primary.dark", boxSizing: "border-box", mx: index === 0 ? "auto" : 0 }}>
-                                    {done ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} /> : <Typography component="span" sx={{ fontSize: 10, lineHeight: 1, color: "inherit", fontWeight: 700 }}>{index + 1}</Typography>}
-                                </Box>
-                                {index < stages.length - 1 && <Box sx={{ height: 2, flex: 1, bgcolor: index < currentIndex ? "primary.main" : "divider" }} />}
-                            </Box>
-                            <Typography variant="caption" sx={{ display: "block", px: 0.25, lineHeight: 1.25, color: reached ? "text.primary" : "text.secondary", fontWeight: active ? 700 : 400 }}>{label}</Typography>
-                        </Box>
-                    );
-                })}
-            </Box>
-            <Typography variant="body2" sx={{ mt: 1.1, px: 0.25 }}>{statusInfo(status).description}</Typography>
+        <Box sx={{ overflowX: "auto", py: 1 }}>
+            <Stepper
+                activeStep={Math.max(workflowIndex(status), 0)}
+                alternativeLabel
+                sx={{
+                    minWidth: compact ? 520 : 600,
+                    "& .MuiStepLabel-label": { fontSize: compact ? 10 : 12 },
+                }}
+            >
+                {WORKFLOW.map((step) => (
+                    <Step key={step.status}>
+                        <StepLabel>{step.label}</StepLabel>
+                    </Step>
+                ))}
+            </Stepper>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {info.description}
+            </Typography>
         </Box>
     );
 }
@@ -408,8 +429,9 @@ function RequestDetailsDialog({
                 >
                     <Box>
                         <Typography
-                            variant="h6"
+                            variant="h5"
                             fontWeight={800}
+                            sx={{ letterSpacing: "-0.02em" }}
                         >
                             Карточка заявки
                         </Typography>
@@ -435,7 +457,7 @@ function RequestDetailsDialog({
                 </Stack>
             </DialogTitle>
 
-            <DialogContent dividers>
+            <DialogContent dividers sx={{ px: { xs: 2, sm: 3 }, py: 3, bgcolor: "grey.50" }}>
                 {loading ? (
                     <Box
                         sx={{
@@ -462,38 +484,51 @@ function RequestDetailsDialog({
                         {error}
                     </Alert>
                 ) : (
-                    <Stack spacing={3}>
-                        <Box>
-                            <Typography
-                                fontWeight={700}
-                                mb={1}
-                            >
-                                Описание проблемы
-                            </Typography>
+                    <Stack spacing={2.5}>
+                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.75, sm: 2.5 } }}>
+                    <Typography variant="subtitle1" fontWeight={800} mb={2}>Информация о заявке</Typography>
+                    <Grid container spacing={2.25}>
+                        {[
+                            ["Клиент", getPersonName(
+                                request.client || request.clientInfo || {
+                                    lastName: request.clientLastName,
+                                    firstName: request.clientFirstName,
+                                    middleName: request.clientMiddleName,
+                                },
+                                "ФИО не указано"
+                            )],
+                            ["Дата создания", formatDate(request.createdAt)],
+                            ["Желаемое время визита", request.preferredVisitAt ? formatDate(request.preferredVisitAt) : "Не указано"],
+                            ["Адрес", getReadableAddress(request)],
+                            ["Оборудование", getReadableEquipment(request)],
+                            ["Мастер", master ? `${getPersonName(master)}${master.phone ? ` · Телефон: ${master.phone}` : ""}` : "Мастер не назначен"],
+                        ].map(([label, value]) => (
+                            <Grid item xs={12} sm={6} key={label}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: "block", mb: 0.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</Typography>
+                                <Typography variant="body1" fontWeight={label === "Клиент" ? 700 : 500} sx={{ overflowWrap: "anywhere", lineHeight: 1.5 }}>{value || "Не указано"}</Typography>
+                            </Grid>
+                        ))}
+                    </Grid>
+                </Box>
 
-                            <Typography
-                                sx={{
-                                    whiteSpace: "pre-wrap",
-                                    overflowWrap: "anywhere",
-                                }}
-                            >
-                                {request.problemDescription ||
-                                    "Описание отсутствует"}
-                            </Typography>
-                        </Box>
+                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.75, sm: 2.5 } }}>
+                    <Typography variant="subtitle1" fontWeight={800} mb={1}>Описание проблемы</Typography>
+                    <Typography color={request.problemDescription ? "text.primary" : "text.secondary"} sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.7 }}>
+                        {request.problemDescription || "Описание отсутствует"}
+                    </Typography>
+                </Box>
 
-                        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2, p: { xs: 1.5, md: 2 } }}>
-            <RequestWorkflow status={request.status} />
-        </Box>
+                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.5, sm: 2.5 } }}>
+                    <Typography variant="subtitle1" fontWeight={800} mb={2}>Этапы заявки</Typography>
+                    <RequestWorkflow status={request.status} />
+                </Box>
 
-        {!ASSIGNABLE_STATUSES.includes(request.status) &&
-            canManage && (
-                <Alert severity="info">
-                    Назначение и переназначение мастера доступны
-                    только до принятия заявки мастером.
-                </Alert>
-            )}
-    </Stack>
+                {!ASSIGNABLE_STATUSES.includes(request.status) && canManage && (
+                    <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        Назначение и переназначение мастера доступны только до принятия заявки мастером.
+                    </Alert>
+                )}
+            </Stack>
 )}
         </DialogContent>
 
