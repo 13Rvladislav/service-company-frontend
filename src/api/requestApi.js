@@ -4,16 +4,27 @@ const API_URL = (
 ).replace(/\/+$/, "");
 
 async function requestApi(path, options = {}) {
-    const response = await fetch(`${API_URL}${path}`, {
-        ...options,
-        credentials: "include",
-        headers: {
-            ...(options.body
-                ? { "Content-Type": "application/json" }
-                : {}),
-            ...options.headers,
-        },
-    });
+    let response;
+
+    try {
+        response = await fetch(`${API_URL}${path}`, {
+            ...options,
+            credentials: "include",
+            headers: {
+                ...(options.body
+                    ? { "Content-Type": "application/json" }
+                    : {}),
+                ...options.headers,
+            },
+        });
+    } catch (error) {
+        const networkError = new Error(
+            "Не удалось связаться с сервером. Проверьте подключение."
+        );
+
+        networkError.isNetworkError = true;
+        throw networkError;
+    }
 
     if (!response.ok) {
         let message = `Ошибка запроса: ${response.status}`;
@@ -27,10 +38,13 @@ async function requestApi(path, options = {}) {
                 error.error ||
                 message;
         } catch {
-            // Ответ сервера может быть без тела или не в формате JSON.
+            // Ответ может быть без тела или не в формате JSON.
         }
 
-        throw new Error(message);
+        const apiError = new Error(message);
+        apiError.status = response.status;
+
+        throw apiError;
     }
 
     if (response.status === 204) {
@@ -45,7 +59,6 @@ async function requestApi(path, options = {}) {
 
     return null;
 }
-
 /**
  * Данные для формы создания заявки:
  * профиль клиента, адрес и оборудование.
@@ -145,6 +158,46 @@ export function assignMaster(requestId, masterId) {
 export function adminCancelRequest(requestId) {
     return requestApi(
         `/requests/${encodeURIComponent(requestId)}/admin-cancel`,
+        {
+            method: "POST",
+        }
+    );
+}
+
+/**
+ * Получение заявок текущего мастера.
+ * GET /api/requests/master
+ */
+export async function getMasterRequests() {
+    const result = await requestApi("/requests/master");
+
+    if (Array.isArray(result)) {
+        return result;
+    }
+
+    return result?.content ?? result?.requests ?? result?.data ?? [];
+}
+
+/**
+ * Принятие заявки мастером.
+ * ASSIGNED -> IN_PROGRESS
+ */
+export function acceptMasterRequest(requestId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/master-accept`,
+        {
+            method: "POST",
+        }
+    );
+}
+
+/**
+ * Отклонение назначения мастером.
+ * ASSIGNED -> WAITING_FOR_ASSIGNMENT
+ */
+export function rejectMasterRequest(requestId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/master-reject`,
         {
             method: "POST",
         }

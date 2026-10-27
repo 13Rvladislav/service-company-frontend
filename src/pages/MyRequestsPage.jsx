@@ -372,7 +372,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                     gap: 1,
                 }}
             >
-                {!(["ACCEPTED", "CANCELLED", "COMPLETED", "REJECTED"].includes(request.status)) && (
+                {["NEW", "WAITING_FOR_ASSIGNMENT", "ASSIGNED"].includes(request.status) && (
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                         <Button
                             color="error"

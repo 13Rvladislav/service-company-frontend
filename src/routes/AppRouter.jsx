@@ -18,7 +18,7 @@ import UsersPage from "../pages/UsersPage";
 import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
 import MyEquipmentPage from "../pages/MyEquipmentPage";
-import MyRequestsPage from "../pages/MyRequestsPage";
+
 
 // Отдельная страница управления заявками
 import RequestManagementPage from "../pages/RequestManagementPage";
@@ -28,6 +28,8 @@ import SpecializationAssignmentPage from "../pages/SpecializationAssignmentPage"
 import AssignMasterZonesPage from "../pages/AssignMasterZonesPage";
 
 import ProtectedRoute from "./ProtectedRoute";
+import MyRequestsPage from "../pages/MyRequestsPage";
+import MasterRequestPage from "../pages/MasterRequestPage";
 
 export default function AppRouter() {
   return (
@@ -77,7 +79,11 @@ export default function AppRouter() {
             path="/specializations/assign"
             element={<SpecializationAssignmentPage />}
           />
-
+          {/* Заявки мастера */}
+          <Route
+            path="/master-requests"
+            element={<MasterRequestPage />}
+          />
           {/* Назначение зон мастерам */}
           <Route
             path="/zones/assign"
