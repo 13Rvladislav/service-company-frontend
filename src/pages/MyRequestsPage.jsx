@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
@@ -31,11 +30,23 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
+import WorkReportViewer from "../components/requests/WorkReportViewer";
 import { getCurrentProfile } from "../api/userApi";
-import { createRequest, getMyRequests, getRequestById, updateRequest, cancelRequest, getCreateRequestForm } from "../api/requestApi";
+import {
+    createRequest,
+    getMyRequests,
+    getRequestById,
+    updateRequest,
+    cancelRequest,
+    getCreateRequestForm,
+} from "../api/requestApi";
 
 const STATUS_INFO = {
-    NEW: { label: "Новая", color: "info", description: "Заявка создана." },
+    NEW: {
+        label: "Новая",
+        color: "info",
+        description: "Заявка создана.",
+    },
     WAITING_FOR_ASSIGNMENT: {
         label: "Ожидает назначения",
         color: "warning",
@@ -136,7 +147,10 @@ function statusInfo(status) {
 
 function getEntityName(entity, fallback = "") {
     if (!entity) return fallback;
-    if (typeof entity === "string" || typeof entity === "number") return String(entity);
+
+    if (typeof entity === "string" || typeof entity === "number") {
+        return String(entity);
+    }
 
     return [
         entity.name,
@@ -147,47 +161,63 @@ function getEntityName(entity, fallback = "") {
         entity.model,
         entity.brand,
         entity.serialNumber ? `№ ${entity.serialNumber}` : null,
-    ].filter(Boolean).join(" · ") || fallback;
+    ]
+        .filter(Boolean)
+        .join(" · ") || fallback;
 }
 
 function getReadableAddress(request) {
-    // Квартира может приходить отдельным полем request.apartment,
-    // а адрес — объектом address. Проверяем оба варианта ответа backend.
     const address = request.address;
-    const apartmentValue = address && typeof address === "object"
-        ? (address.apartment ?? request.apartment)
-        : request.apartment;
-    const apartment = apartmentValue != null && String(apartmentValue).trim()
-        ? `кв. ${String(apartmentValue).trim()}`
-        : null;
+
+    const apartmentValue =
+        address && typeof address === "object"
+            ? address.apartment ?? request.apartment
+            : request.apartment;
+
+    const apartment =
+        apartmentValue != null && String(apartmentValue).trim()
+            ? `кв. ${String(apartmentValue).trim()}`
+            : null;
 
     if (address && typeof address === "object") {
         const parts = [
             address.cityName || address.city?.name || address.city,
             address.streetName || address.street?.name || address.street,
-            address.houseNumber || address.house?.number || address.house?.houseNumber,
+            address.houseNumber ||
+                address.house?.number ||
+                address.house?.houseNumber,
             apartment,
         ].filter((part) => part && typeof part !== "object");
+
         if (parts.length) return parts.join(", ");
     }
 
     if (typeof address === "string" && address.trim()) {
         return [address.trim(), apartment].filter(Boolean).join(", ");
     }
-    const fallback = request.addressId ? `ID адреса: ${request.addressId}` : "Адрес не предоставлен backend";
+
+    const fallback = request.addressId
+        ? `ID адреса: ${request.addressId}`
+        : "Адрес не предоставлен backend";
+
     return [fallback, apartment].filter(Boolean).join(", ");
 }
 
 function getReadableEquipment(request) {
-    // Не ищем оборудование в профиле или стороннем справочнике.
     const equipment = request.equipment;
+
     if (!equipment || typeof equipment !== "object") {
-        return request.equipmentId ? `ID оборудования: ${request.equipmentId}` : "Оборудование не предоставлено backend";
+        return request.equipmentId
+            ? `ID оборудования: ${request.equipmentId}`
+            : "Оборудование не предоставлено backend";
     }
 
-    const typeName = equipment.equipmentTypeName;
-    const model = equipment.model;
-    return [typeName, model].filter(Boolean).join(" ") || "Оборудование не предоставлено backend";
+    return [
+        equipment.equipmentTypeName || equipment.typeName,
+        equipment.model,
+    ]
+        .filter(Boolean)
+        .join(" ") || "Оборудование не предоставлено backend";
 }
 
 function workflowIndex(status) {
@@ -225,20 +255,74 @@ function RequestWorkflow({ status }) {
                 ))}
             </Stepper>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 1 }}
+            >
                 {info.description}
             </Typography>
         </Box>
     );
 }
 
-function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
+function RequestDetailsDialog({
+    request,
+    onClose,
+    onEdit,
+    onCancel,
+    busy,
+}) {
     if (!request) return null;
+
+    if (request._loading) {
+        return (
+            <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+                <DialogContent>
+                    <Box
+                        sx={{
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            py: 8,
+                        }}
+                    >
+                        <CircularProgress />
+                    </Box>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    if (request._loadError) {
+        return (
+            <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+                <DialogTitle>Не удалось загрузить заявку</DialogTitle>
+                <DialogContent>
+                    <Alert severity="error">{request._loadError}</Alert>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={onClose}>Закрыть</Button>
+                </DialogActions>
+            </Dialog>
+        );
+    }
 
     const info = statusInfo(request.status);
 
+    const canEditOrCancel = [
+        "NEW",
+        "WAITING_FOR_ASSIGNMENT",
+        "ASSIGNED",
+    ].includes(request.status);
+
     return (
-        <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+        <Dialog
+            open
+            onClose={() => !busy && onClose()}
+            maxWidth="md"
+            fullWidth
+        >
             <DialogTitle>
                 <Stack
                     direction={{ xs: "column", sm: "row" }}
@@ -250,11 +334,17 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         <Typography variant="h6" fontWeight={700}>
                             Карточка заявки
                         </Typography>
+
                         <Typography variant="body2" color="text.secondary">
                             № {request.id}
                         </Typography>
                     </Box>
-                    <Chip label={info.label} color={info.color} size="small" />
+
+                    <Chip
+                        label={info.label}
+                        color={info.color}
+                        size="small"
+                    />
                 </Stack>
             </DialogTitle>
 
@@ -264,6 +354,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         <Typography fontWeight={700} mb={1}>
                             Описание проблемы
                         </Typography>
+
                         <Typography sx={{ whiteSpace: "pre-wrap" }}>
                             {request.problemDescription || "Описание отсутствует"}
                         </Typography>
@@ -274,13 +365,17 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                             <Typography variant="body2" color="text.secondary">
                                 Дата создания
                             </Typography>
-                            <Typography>{formatDate(request.createdAt)}</Typography>
+
+                            <Typography>
+                                {formatDate(request.createdAt)}
+                            </Typography>
                         </Grid>
 
                         <Grid size={{ xs: 12, sm: 6 }}>
                             <Typography variant="body2" color="text.secondary">
                                 Желаемое время визита
                             </Typography>
+
                             <Typography>
                                 {formatDate(request.preferredVisitAt)}
                             </Typography>
@@ -290,6 +385,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                             <Typography variant="body2" color="text.secondary">
                                 Адрес
                             </Typography>
+
                             <Typography sx={{ overflowWrap: "anywhere" }}>
                                 {getReadableAddress(request)}
                             </Typography>
@@ -299,6 +395,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                             <Typography variant="body2" color="text.secondary">
                                 Оборудование
                             </Typography>
+
                             <Typography sx={{ overflowWrap: "anywhere" }}>
                                 {getReadableEquipment(request)}
                             </Typography>
@@ -308,13 +405,25 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                             <Typography variant="body2" color="text.secondary">
                                 Мастер
                             </Typography>
-                            <Typography sx={{ overflowWrap: "anywhere" }}>
+
+                            <Typography
+                                sx={{
+                                    whiteSpace: "pre-line",
+                                    overflowWrap: "anywhere",
+                                }}
+                            >
                                 {request.master
                                     ? [
-                                        [request.master.lastName, request.master.firstName, request.master.middleName]
+                                        [
+                                            request.master.lastName,
+                                            request.master.firstName,
+                                            request.master.middleName,
+                                        ]
                                             .filter(Boolean)
                                             .join(" "),
-                                        request.master.phone ? `Телефон: ${request.master.phone}` : null,
+                                        request.master.phone
+                                            ? `Телефон: ${request.master.phone}`
+                                            : null,
                                     ]
                                         .filter(Boolean)
                                         .join("\n")
@@ -328,6 +437,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                             <Typography fontWeight={700} mb={1}>
                                 Комментарий клиента
                             </Typography>
+
                             <Typography sx={{ whiteSpace: "pre-wrap" }}>
                                 {request.clientComment}
                             </Typography>
@@ -340,8 +450,21 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         <Typography variant="h6" fontWeight={700} mb={2}>
                             Workflow заявки
                         </Typography>
+
                         <RequestWorkflow status={request.status} />
                     </Box>
+
+                    {/* Отчёт мастера отображается в подробной карточке заявки. */}
+                    {[
+                        "REPORT_SUBMITTED",
+                        "REVISION_REQUIRED",
+                        "COMPLETED",
+                    ].includes(request.status) && (
+                        <WorkReportViewer
+                            requestId={request.id}
+                            requestStatus={request.status}
+                        />
+                    )}
 
                     {request.status === "ACCEPTED" ? (
                         <Alert severity="success">
@@ -351,6 +474,10 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         <Alert severity="info">
                             Заявка отменена. Редактирование и повторная отмена недоступны.
                         </Alert>
+                    ) : !canEditOrCancel ? (
+                        <Alert severity="info">
+                            На текущем этапе редактирование и отмена заявки недоступны.
+                        </Alert>
                     ) : (
                         <Alert severity="info">
                             До принятия заявки мастером можно изменить описание, комментарий и желаемое время визита, а также отменить заявку.
@@ -358,8 +485,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                     )}
 
                     <Alert severity="info">
-                        Показан текущий статус. История изменений статусов пока
-                        не предоставляется backend.
+                        Показан текущий статус. История изменений статусов пока не предоставляется backend.
                     </Alert>
                 </Stack>
             </DialogContent>
@@ -372,8 +498,11 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                     gap: 1,
                 }}
             >
-                {["NEW", "WAITING_FOR_ASSIGNMENT", "ASSIGNED"].includes(request.status) && (
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                {canEditOrCancel && (
+                    <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                    >
                         <Button
                             color="error"
                             startIcon={<CancelOutlinedIcon />}
@@ -382,6 +511,7 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         >
                             Отменить заявку
                         </Button>
+
                         <Button
                             variant="contained"
                             startIcon={<EditOutlinedIcon />}
@@ -392,48 +522,93 @@ function RequestDetailsDialog({ request, onClose, onEdit, onCancel, busy }) {
                         </Button>
                     </Stack>
                 )}
-                <Button onClick={onClose} disabled={busy}>Закрыть</Button>
+
+                <Button onClick={onClose} disabled={busy}>
+                    Закрыть
+                </Button>
             </DialogActions>
         </Dialog>
     );
 }
 
-function getRequestErrorMessage(error, preferredVisitAt = "") {
+function getRequestErrorMessage(error) {
     const data = error?.response?.data;
     const validationErrors = data?.validationErrors || data?.errors;
 
     if (validationErrors && typeof validationErrors === "object") {
-        const messages = Object.entries(validationErrors).map(([field, message]) => {
-            const fieldName = {
-                addressId: "Адрес",
-                equipmentId: "Оборудование",
-                problemDescription: "Описание проблемы",
-                clientComment: "Комментарий",
-                preferredVisitAt: "Дата и время визита",
-                apartment: "Квартира",
-            }[field] || field;
-            return `${fieldName}: ${Array.isArray(message) ? message.join("; ") : message}`;
-        }).filter(Boolean);
+        const messages = Object.entries(validationErrors)
+            .map(([field, message]) => {
+                const fieldName = {
+                    addressId: "Адрес",
+                    equipmentId: "Оборудование",
+                    problemDescription: "Описание проблемы",
+                    clientComment: "Комментарий",
+                    preferredVisitAt: "Дата и время визита",
+                    apartment: "Квартира",
+                }[field] || field;
+
+                return `${fieldName}: ${
+                    Array.isArray(message)
+                        ? message.join("; ")
+                        : message
+                }`;
+            })
+            .filter(Boolean);
+
         if (messages.length) return messages.join("\n");
     }
 
-    const raw = String(data?.message || data?.detail || error?.message || "").toLowerCase();
-    if (raw.includes("preferredvisitat") || raw.includes("visit") || raw.includes("время") || raw.includes("дат") || raw.includes("future")) {
+    const raw = String(
+        data?.message || data?.detail || error?.message || ""
+    ).toLowerCase();
+
+    if (
+        raw.includes("preferredvisitat") ||
+        raw.includes("visit") ||
+        raw.includes("время") ||
+        raw.includes("дат") ||
+        raw.includes("future")
+    ) {
         return "Некорректная дата или время визита. Выберите дату и время в будущем либо оставьте поле пустым.";
     }
-    if (raw.includes("equipmentid") || raw.includes("equipment") || raw.includes("оборудован")) {
+
+    if (
+        raw.includes("equipmentid") ||
+        raw.includes("equipment") ||
+        raw.includes("оборудован")
+    ) {
         return "Не выбрано оборудование или оно недоступно. Выберите оборудование из списка.";
     }
-    if (raw.includes("addressid") || raw.includes("address") || raw.includes("адрес")) {
+
+    if (
+        raw.includes("addressid") ||
+        raw.includes("address") ||
+        raw.includes("адрес")
+    ) {
         return "Не выбран адрес обслуживания. Выберите адрес из списка.";
     }
-    if (raw.includes("problemdescription") || raw.includes("description") || raw.includes("описан")) {
+
+    if (
+        raw.includes("problemdescription") ||
+        raw.includes("description") ||
+        raw.includes("описан")
+    ) {
         return "Проверьте описание проблемы: поле обязательно для заполнения.";
     }
-    if (raw.includes("validation") || raw.includes("валидац") || raw.includes("bad request")) {
+
+    if (
+        raw.includes("validation") ||
+        raw.includes("валидац") ||
+        raw.includes("bad request")
+    ) {
         return "Проверьте заполненные поля: адрес, оборудование и описание проблемы. Дата визита, если указана, должна быть в будущем.";
     }
-    return data?.message || data?.detail || "Не удалось выполнить запрос. Проверьте заполненные поля и попробуйте ещё раз.";
+
+    return (
+        data?.message ||
+        data?.detail ||
+        "Не удалось выполнить запрос. Проверьте заполненные поля и попробуйте ещё раз."
+    );
 }
 
 export default function MyRequestsPage() {
@@ -443,11 +618,14 @@ export default function MyRequestsPage() {
     const [refreshing, setRefreshing] = useState(false);
     const [filter, setFilter] = useState("ALL");
     const [selectedRequest, setSelectedRequest] = useState(null);
+
     const [editOpen, setEditOpen] = useState(false);
     const [editError, setEditError] = useState("");
     const [editing, setEditing] = useState(false);
+
     const [cancelTarget, setCancelTarget] = useState(null);
     const [cancelling, setCancelling] = useState(false);
+
     const [editForm, setEditForm] = useState({
         problemDescription: "",
         clientComment: "",
@@ -483,8 +661,6 @@ export default function MyRequestsPage() {
             setLoading(true);
         }
 
-        // Профиль и заявки загружаются независимо. Ошибка Request Service
-        // не должна сбрасывать авторизованного пользователя в Guest.
         const profilePromise = getCurrentProfile()
             .then((profile) => {
                 if (profile) setUser(profile);
@@ -501,15 +677,19 @@ export default function MyRequestsPage() {
                     setRequests(requestList);
                     return true;
                 }
-                throw new Error("Request Service вернул некорректный список заявок.");
+
+                throw new Error(
+                    "Request Service вернул некорректный список заявок."
+                );
             })
             .catch((requestsError) => {
                 console.error("Ошибка загрузки заявок:", requestsError);
+
                 setError(
                     requestsError.message ||
                     "Не удалось загрузить заявки. Проверь доступность Request Service."
                 );
-                // Не обнуляем уже показанные заявки при сетевой ошибке.
+
                 return false;
             });
 
@@ -548,66 +728,110 @@ export default function MyRequestsPage() {
 
     const stats = useMemo(() => ({
         total: requests.length,
-        active: requests.filter((r) => ACTIVE_STATUSES.includes(r.status)).length,
-        completed: requests.filter((r) => r.status === "COMPLETED").length,
+        active: requests.filter(
+            (request) => ACTIVE_STATUSES.includes(request.status)
+        ).length,
+        completed: requests.filter(
+            (request) => request.status === "COMPLETED"
+        ).length,
     }), [requests]);
 
     const toDateTimeLocal = (value) => {
         if (!value) return "";
+
         const date = new Date(value);
+
         if (Number.isNaN(date.getTime())) return "";
-        const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+
+        const localDate = new Date(
+            date.getTime() - date.getTimezoneOffset() * 60000
+        );
+
         return localDate.toISOString().slice(0, 16);
     };
 
     const openRequest = async (request) => {
-        // Краткий ответ /requests/my нужен только для списка.
-        // Все поля открытой карточки берём исключительно из GET /requests/{id}.
-        setSelectedRequest({ id: request.id, _loading: true });
+        setSelectedRequest({
+            id: request.id,
+            _loading: true,
+        });
 
         try {
             const details = await getRequestById(request.id);
+
             if (!details || typeof details !== "object") {
-                throw new Error("Backend не вернул подробности заявки.");
+                throw new Error(
+                    "Backend не вернул подробности заявки."
+                );
             }
+
             setSelectedRequest(details);
-        } catch (e) {
-            console.error("Не удалось загрузить подробности заявки:", e);
+        } catch (requestError) {
+            console.error(
+                "Не удалось загрузить подробности заявки:",
+                requestError
+            );
+
             setSelectedRequest({
                 id: request.id,
-                _loadError: e.message || "Не удалось загрузить карточку заявки.",
+                _loadError:
+                    requestError.message ||
+                    "Не удалось загрузить карточку заявки.",
             });
         }
     };
 
     const openEditDialog = (request) => {
-        if (!request || request.status === "ACCEPTED") return;
+        if (
+            !request ||
+            !["NEW", "WAITING_FOR_ASSIGNMENT", "ASSIGNED"].includes(
+                request.status
+            )
+        ) {
+            return;
+        }
 
         setError("");
         setEditError("");
+
         setEditForm({
             problemDescription: request.problemDescription || "",
             clientComment: request.clientComment || "",
             preferredVisitAt: toDateTimeLocal(request.preferredVisitAt),
         });
+
         setEditOpen(true);
     };
 
     const handleEdit = async () => {
-        if (!selectedRequest || selectedRequest.status === "ACCEPTED") return;
+        if (
+            !selectedRequest ||
+            !["NEW", "WAITING_FOR_ASSIGNMENT", "ASSIGNED"].includes(
+                selectedRequest.status
+            )
+        ) {
+            return;
+        }
 
         if (editForm.problemDescription.trim().length < 5) {
-            setEditError("Описание проблемы должно содержать минимум 5 символов.");
+            setEditError(
+                "Описание проблемы должно содержать минимум 5 символов."
+            );
             return;
         }
 
         if (editForm.preferredVisitAt) {
-            const selectedVisitDate = new Date(editForm.preferredVisitAt);
+            const selectedVisitDate = new Date(
+                editForm.preferredVisitAt
+            );
+
             if (
                 Number.isNaN(selectedVisitDate.getTime()) ||
                 selectedVisitDate.getTime() <= Date.now()
             ) {
-                setEditError("Желаемое время визита должно быть в будущем. Выберите будущую дату и время.");
+                setEditError(
+                    "Желаемое время визита должно быть в будущем. Выберите будущую дату и время."
+                );
                 return;
             }
         }
@@ -624,27 +848,51 @@ export default function MyRequestsPage() {
         };
 
         try {
-            const updated = await updateRequest(selectedRequest.id, payload);
-            const merged = { ...selectedRequest, ...(updated || {}), ...payload };
+            const updated = await updateRequest(
+                selectedRequest.id,
+                payload
+            );
+
+            const merged = {
+                ...selectedRequest,
+                ...(updated || {}),
+                ...payload,
+            };
 
             setRequests((previous) =>
-                previous.map((item) => item.id === selectedRequest.id ? merged : item)
+                previous.map((item) =>
+                    item.id === selectedRequest.id ? merged : item
+                )
             );
+
             setSelectedRequest(merged);
             setEditOpen(false);
             setSuccess("Заявка успешно обновлена.");
-            await loadData(true);
-        } catch (e) {
-            console.error("Ошибка редактирования заявки:", e);
 
-            setEditError(getRequestErrorMessage(e, editForm.preferredVisitAt));
+            await loadData(true);
+        } catch (requestError) {
+            console.error(
+                "Ошибка редактирования заявки:",
+                requestError
+            );
+
+            setEditError(
+                getRequestErrorMessage(requestError)
+            );
         } finally {
             setEditing(false);
         }
     };
 
     const handleCancelRequest = async () => {
-        if (!cancelTarget || cancelTarget.status === "ACCEPTED") return;
+        if (
+            !cancelTarget ||
+            !["NEW", "WAITING_FOR_ASSIGNMENT", "ASSIGNED"].includes(
+                cancelTarget.status
+            )
+        ) {
+            return;
+        }
 
         setCancelling(true);
         setError("");
@@ -652,6 +900,7 @@ export default function MyRequestsPage() {
 
         try {
             const cancelled = await cancelRequest(cancelTarget.id);
+
             const updated = {
                 ...cancelTarget,
                 ...(cancelled || {}),
@@ -659,7 +908,9 @@ export default function MyRequestsPage() {
             };
 
             setRequests((previous) =>
-                previous.map((item) => item.id === cancelTarget.id ? updated : item)
+                previous.map((item) =>
+                    item.id === cancelTarget.id ? updated : item
+                )
             );
 
             if (selectedRequest?.id === cancelTarget.id) {
@@ -668,12 +919,14 @@ export default function MyRequestsPage() {
 
             setCancelTarget(null);
             setSuccess("Заявка отменена.");
+
             await loadData(true);
-        } catch (e) {
-            console.error("Ошибка отмены заявки:", e);
+        } catch (requestError) {
+            console.error("Ошибка отмены заявки:", requestError);
+
             setError(
-                e.response?.data?.message ||
-                e.message ||
+                requestError.response?.data?.message ||
+                requestError.message ||
                 "Не удалось отменить заявку."
             );
         } finally {
@@ -689,6 +942,7 @@ export default function MyRequestsPage() {
         setFormDataLoading(true);
         setCreateAddress(null);
         setEquipment([]);
+
         setForm({
             addressId: "",
             apartment: "",
@@ -697,30 +951,40 @@ export default function MyRequestsPage() {
             clientComment: "",
             preferredVisitAt: "",
         });
+
         setCreateOpen(true);
 
         try {
-            // Единственный запрос для данных формы создания заявки.
             const data = await getCreateRequestForm();
             const address = data?.address;
 
             if (!data?.client || !address || address.houseId == null) {
-                throw new Error("Request Service вернул неполные данные формы создания заявки.");
+                throw new Error(
+                    "Request Service вернул неполные данные формы создания заявки."
+                );
             }
 
-            // Авторизованный пользователь берётся из user-service, не из формы заявки.
             setCreateAddress(address);
-            setEquipment(Array.isArray(data.equipment) ? data.equipment : []);
+            setEquipment(
+                Array.isArray(data.equipment) ? data.equipment : []
+            );
+
             setForm((previous) => ({
                 ...previous,
                 addressId: String(address.houseId),
-                // Квартира берётся именно из блока address ответа create-form.
-                apartment: address.apartment == null ? "" : String(address.apartment),
+                apartment:
+                    address.apartment == null
+                        ? ""
+                        : String(address.apartment),
             }));
-        } catch (e) {
-            console.error("Ошибка загрузки формы заявки:", e);
+        } catch (requestError) {
+            console.error(
+                "Ошибка загрузки формы заявки:",
+                requestError
+            );
+
             setError(
-                e.message ||
+                requestError.message ||
                 "Не удалось загрузить данные для создания заявки."
             );
         } finally {
@@ -734,18 +998,31 @@ export default function MyRequestsPage() {
         setSuccess("");
 
         const validationErrors = {};
-        if (!form.addressId) validationErrors.addressId = "Выберите адрес обслуживания.";
-        if (!form.equipmentId) validationErrors.equipmentId = "Выберите оборудование для заявки.";
+
+        if (!form.addressId) {
+            validationErrors.addressId =
+                "Выберите адрес обслуживания.";
+        }
+
+        if (!form.equipmentId) {
+            validationErrors.equipmentId =
+                "Выберите оборудование для заявки.";
+        }
+
         if (form.problemDescription.trim().length < 5) {
-            validationErrors.problemDescription = "Описание проблемы должно содержать минимум 5 символов.";
+            validationErrors.problemDescription =
+                "Описание проблемы должно содержать минимум 5 символов.";
         }
 
         if (form.preferredVisitAt) {
             const visitDate = new Date(form.preferredVisitAt);
+
             if (Number.isNaN(visitDate.getTime())) {
-                validationErrors.preferredVisitAt = "Укажите корректную дату и время визита.";
+                validationErrors.preferredVisitAt =
+                    "Укажите корректную дату и время визита.";
             } else if (visitDate.getTime() <= Date.now()) {
-                validationErrors.preferredVisitAt = "Выберите дату и время в будущем либо оставьте поле пустым.";
+                validationErrors.preferredVisitAt =
+                    "Выберите дату и время в будущем либо оставьте поле пустым.";
             }
         }
 
@@ -764,9 +1041,7 @@ export default function MyRequestsPage() {
             equipmentId: form.equipmentId,
             problemDescription: form.problemDescription.trim(),
             clientComment: form.clientComment.trim() || null,
-            preferredVisitAt: form.preferredVisitAt
-                ? form.preferredVisitAt
-                : null,
+            preferredVisitAt: form.preferredVisitAt || null,
         };
 
         try {
@@ -782,11 +1057,16 @@ export default function MyRequestsPage() {
             setCreateOpen(false);
             setSuccess("Заявка успешно создана.");
             setSelectedRequest(created);
-        } catch (e) {
-            console.error("Ошибка создания заявки:", e);
+        } catch (requestError) {
+            console.error(
+                "Ошибка создания заявки:",
+                requestError
+            );
 
-            const data = e?.response?.data;
-            const backendErrors = data?.validationErrors || data?.errors;
+            const data = requestError?.response?.data;
+            const backendErrors =
+                data?.validationErrors || data?.errors;
+
             const fieldMap = {
                 addressId: "addressId",
                 equipmentId: "equipmentId",
@@ -795,41 +1075,94 @@ export default function MyRequestsPage() {
                 preferredVisitAt: "preferredVisitAt",
                 apartment: "apartment",
             };
+
             const mappedErrors = {};
 
-            if (backendErrors && typeof backendErrors === "object") {
-                Object.entries(backendErrors).forEach(([field, message]) => {
-                    const mappedField = fieldMap[field] || fieldMap[field?.toLowerCase()];
-                    const text = Array.isArray(message) ? message.join("; ") : String(message || "");
-                    if (mappedField) mappedErrors[mappedField] = text;
-                });
+            if (
+                backendErrors &&
+                typeof backendErrors === "object"
+            ) {
+                Object.entries(backendErrors).forEach(
+                    ([field, message]) => {
+                        const mappedField =
+                            fieldMap[field] ||
+                            fieldMap[field?.toLowerCase()];
+
+                        const text = Array.isArray(message)
+                            ? message.join("; ")
+                            : String(message || "");
+
+                        if (mappedField) {
+                            mappedErrors[mappedField] = text;
+                        }
+                    }
+                );
             }
 
-            const rawMessage = String(data?.message || data?.detail || e?.message || "").toLowerCase();
-            if (!mappedErrors.preferredVisitAt && (
-                rawMessage.includes("preferredvisitat") ||
-                rawMessage.includes("visit") ||
-                rawMessage.includes("время") ||
-                rawMessage.includes("дат") ||
-                rawMessage.includes("future")
-            )) {
-                mappedErrors.preferredVisitAt = "Некорректная дата или время визита. Выберите дату и время в будущем либо оставьте поле пустым.";
+            const rawMessage = String(
+                data?.message ||
+                data?.detail ||
+                requestError?.message ||
+                ""
+            ).toLowerCase();
+
+            if (
+                !mappedErrors.preferredVisitAt &&
+                (
+                    rawMessage.includes("preferredvisitat") ||
+                    rawMessage.includes("visit") ||
+                    rawMessage.includes("время") ||
+                    rawMessage.includes("дат") ||
+                    rawMessage.includes("future")
+                )
+            ) {
+                mappedErrors.preferredVisitAt =
+                    "Некорректная дата или время визита. Выберите дату и время в будущем либо оставьте поле пустым.";
             }
-            if (!mappedErrors.equipmentId && (rawMessage.includes("equipment") || rawMessage.includes("оборудован"))) {
-                mappedErrors.equipmentId = "Оборудование не выбрано или недоступно. Проверьте выбранное оборудование.";
+
+            if (
+                !mappedErrors.equipmentId &&
+                (
+                    rawMessage.includes("equipment") ||
+                    rawMessage.includes("оборудован")
+                )
+            ) {
+                mappedErrors.equipmentId =
+                    "Оборудование не выбрано или недоступно. Проверьте выбранное оборудование.";
             }
-            if (!mappedErrors.addressId && (rawMessage.includes("address") || rawMessage.includes("адрес"))) {
-                mappedErrors.addressId = "Адрес обслуживания не выбран или недоступен. Проверьте адрес.";
+
+            if (
+                !mappedErrors.addressId &&
+                (
+                    rawMessage.includes("address") ||
+                    rawMessage.includes("адрес")
+                )
+            ) {
+                mappedErrors.addressId =
+                    "Адрес обслуживания не выбран или недоступен. Проверьте адрес.";
             }
-            if (!mappedErrors.problemDescription && (rawMessage.includes("problemdescription") || rawMessage.includes("description") || rawMessage.includes("описан"))) {
-                mappedErrors.problemDescription = "Описание проблемы должно содержать минимум 5 символов.";
+
+            if (
+                !mappedErrors.problemDescription &&
+                (
+                    rawMessage.includes("problemdescription") ||
+                    rawMessage.includes("description") ||
+                    rawMessage.includes("описан")
+                )
+            ) {
+                mappedErrors.problemDescription =
+                    "Описание проблемы должно содержать минимум 5 символов.";
             }
 
             if (Object.keys(mappedErrors).length > 0) {
                 setCreateFieldErrors(mappedErrors);
                 setCreateError("Проверьте поля, отмеченные ниже.");
             } else {
-                setCreateError(data?.message || data?.detail || "Не удалось создать заявку. Проверьте данные и попробуйте ещё раз.");
+                setCreateError(
+                    data?.message ||
+                    data?.detail ||
+                    "Не удалось создать заявку. Проверьте данные и попробуйте ещё раз."
+                );
             }
         } finally {
             setCreating(false);
@@ -843,18 +1176,32 @@ export default function MyRequestsPage() {
                     sx={{
                         display: "flex",
                         justifyContent: "space-between",
-                        alignItems: { xs: "flex-start", sm: "center" },
-                        flexDirection: { xs: "column", sm: "row" },
+                        alignItems: {
+                            xs: "flex-start",
+                            sm: "center",
+                        },
+                        flexDirection: {
+                            xs: "column",
+                            sm: "row",
+                        },
                         gap: 2,
                         mb: 3,
                         width: "100%",
                     }}
                 >
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="h4" fontWeight={800} color="primary">
+                        <Typography
+                            variant="h4"
+                            fontWeight={800}
+                            color="primary"
+                        >
                             Мои заявки
                         </Typography>
-                        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+
+                        <Typography
+                            color="text.secondary"
+                            sx={{ mt: 0.5 }}
+                        >
                             Создавайте обращения и отслеживайте ход их обработки.
                         </Typography>
                     </Box>
@@ -870,7 +1217,11 @@ export default function MyRequestsPage() {
                     >
                         <Button
                             variant="outlined"
-                            startIcon={<RefreshIcon />}
+                            startIcon={
+                                refreshing
+                                    ? <CircularProgress size={16} />
+                                    : <RefreshIcon />
+                            }
                             onClick={() => loadData(true)}
                             disabled={loading || refreshing}
                             size="small"
@@ -886,7 +1237,9 @@ export default function MyRequestsPage() {
                                 backgroundColor: "#FFFFFF",
                                 whiteSpace: "nowrap",
                                 boxShadow: "none",
-                                "& .MuiButton-startIcon": { marginRight: 0.7 },
+                                "& .MuiButton-startIcon": {
+                                    marginRight: 0.7,
+                                },
                                 "&:hover": {
                                     borderColor: "#93C5FD",
                                     backgroundColor: "#EFF6FF",
@@ -894,7 +1247,7 @@ export default function MyRequestsPage() {
                                 },
                             }}
                         >
-                            Обновить
+                            {refreshing ? "Обновление..." : "Обновить"}
                         </Button>
 
                         {user?.role === "CLIENT" && (
@@ -913,7 +1266,9 @@ export default function MyRequestsPage() {
                                     backgroundColor: "#2563EB",
                                     whiteSpace: "nowrap",
                                     boxShadow: "none",
-                                    "& .MuiButton-startIcon": { marginRight: 0.7 },
+                                    "& .MuiButton-startIcon": {
+                                        marginRight: 0.7,
+                                    },
                                     "&:hover": {
                                         backgroundColor: "#1D4ED8",
                                         boxShadow: "none",
@@ -964,12 +1319,24 @@ export default function MyRequestsPage() {
                             color: "#16A34A",
                         },
                     ].map((item) => (
-                        <Grid key={item.label} size={{ xs: 12, sm: 4 }}>
-                            <Card sx={{ borderRadius: 3, height: "100%" }}>
+                        <Grid
+                            key={item.label}
+                            size={{ xs: 12, sm: 4 }}
+                        >
+                            <Card
+                                sx={{
+                                    borderRadius: 3,
+                                    height: "100%",
+                                }}
+                            >
                                 <CardContent>
-                                    <Typography color="text.secondary" variant="body2">
+                                    <Typography
+                                        color="text.secondary"
+                                        variant="body2"
+                                    >
                                         {item.label}
                                     </Typography>
+
                                     <Typography
                                         variant="h3"
                                         fontWeight={800}
@@ -985,12 +1352,23 @@ export default function MyRequestsPage() {
 
                 <Card sx={{ borderRadius: 3, mb: 3 }}>
                     <CardContent>
-                        <Grid container spacing={2} alignItems="center">
+                        <Grid
+                            container
+                            spacing={2}
+                            alignItems="center"
+                        >
                             <Grid size={{ xs: 12, md: 7 }}>
-                                <Typography variant="h6" fontWeight={700}>
+                                <Typography
+                                    variant="h6"
+                                    fontWeight={700}
+                                >
                                     Список заявок
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Выбери заявку, чтобы открыть подробную карточку.
                                 </Typography>
                             </Grid>
@@ -1002,7 +1380,9 @@ export default function MyRequestsPage() {
                                     size="small"
                                     label="Фильтр по статусу"
                                     value={filter}
-                                    onChange={(event) => setFilter(event.target.value)}
+                                    onChange={(event) =>
+                                        setFilter(event.target.value)
+                                    }
                                 >
                                     {FILTERS.map((option) => (
                                         <MenuItem
@@ -1019,37 +1399,59 @@ export default function MyRequestsPage() {
                 </Card>
 
                 {loading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                    <Box
+                        sx={{
+                            display: "flex",
+                            justifyContent: "center",
+                            py: 8,
+                        }}
+                    >
                         <CircularProgress />
                     </Box>
                 ) : filteredRequests.length === 0 ? (
                     <Card sx={{ borderRadius: 3 }}>
-                        <CardContent sx={{ textAlign: "center", py: 8 }}>
+                        <CardContent
+                            sx={{
+                                textAlign: "center",
+                                py: 8,
+                            }}
+                        >
                             <AssignmentOutlinedIcon
-                                sx={{ fontSize: 54, color: "text.disabled", mb: 1 }}
+                                sx={{
+                                    fontSize: 54,
+                                    color: "text.disabled",
+                                    mb: 1,
+                                }}
                             />
 
-                            <Typography variant="h6" fontWeight={700}>
+                            <Typography
+                                variant="h6"
+                                fontWeight={700}
+                            >
                                 {requests.length === 0
                                     ? "У вас пока нет заявок"
                                     : "Заявки не найдены"}
                             </Typography>
 
-                            <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>
+                            <Typography
+                                color="text.secondary"
+                                sx={{ mt: 1, mb: 3 }}
+                            >
                                 {requests.length === 0
                                     ? "Создайте первую заявку для обращения в сервисную компанию."
                                     : "Попробуйте выбрать другой фильтр."}
                             </Typography>
 
-                            {requests.length === 0 && user?.role === "CLIENT" && (
-                                <Button
-                                    variant="contained"
-                                    startIcon={<AddIcon />}
-                                    onClick={openCreateDialog}
-                                >
-                                    Создать заявку
-                                </Button>
-                            )}
+                            {requests.length === 0 &&
+                                user?.role === "CLIENT" && (
+                                    <Button
+                                        variant="contained"
+                                        startIcon={<AddIcon />}
+                                        onClick={openCreateDialog}
+                                    >
+                                        Создать заявку
+                                    </Button>
+                                )}
                         </CardContent>
                     </Card>
                 ) : (
@@ -1064,7 +1466,10 @@ export default function MyRequestsPage() {
                                     role="button"
                                     tabIndex={0}
                                     onKeyDown={(event) => {
-                                        if (event.key === "Enter" || event.key === " ") {
+                                        if (
+                                            event.key === "Enter" ||
+                                            event.key === " "
+                                        ) {
                                             event.preventDefault();
                                             openRequest(request);
                                         }
@@ -1072,8 +1477,12 @@ export default function MyRequestsPage() {
                                     sx={{
                                         borderRadius: 3,
                                         cursor: "pointer",
-                                        transition: "box-shadow .2s, transform .2s",
-                                        "&:hover": { boxShadow: 5, transform: "translateY(-1px)" },
+                                        transition:
+                                            "box-shadow .2s, transform .2s",
+                                        "&:hover": {
+                                            boxShadow: 5,
+                                            transform: "translateY(-1px)",
+                                        },
                                         "&:focus-visible": {
                                             outline: "2px solid",
                                             outlineColor: "primary.main",
@@ -1081,23 +1490,51 @@ export default function MyRequestsPage() {
                                         },
                                     }}
                                 >
-                                    <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                                    <CardContent
+                                        sx={{
+                                            p: { xs: 2, md: 3 },
+                                        }}
+                                    >
                                         <Stack
-                                            direction={{ xs: "column", sm: "row" }}
+                                            direction={{
+                                                xs: "column",
+                                                sm: "row",
+                                            }}
                                             justifyContent="space-between"
-                                            alignItems={{ xs: "flex-start", sm: "center" }}
+                                            alignItems={{
+                                                xs: "flex-start",
+                                                sm: "center",
+                                            }}
                                             spacing={2}
                                         >
-                                            <Stack spacing={1.25} sx={{ minWidth: 0, flex: 1 }}>
+                                            <Stack
+                                                spacing={1.25}
+                                                sx={{
+                                                    minWidth: 0,
+                                                    flex: 1,
+                                                }}
+                                            >
                                                 <Stack
                                                     direction="row"
                                                     spacing={1}
                                                     alignItems="center"
                                                     flexWrap="wrap"
                                                 >
-                                                    <Typography fontWeight={800} sx={{ overflowWrap: "anywhere" }}>
-                                                        Заявка № {String(request.requestNumber ?? request.number ?? request.id).slice(0, 8)}
+                                                    <Typography
+                                                        fontWeight={800}
+                                                        sx={{
+                                                            overflowWrap:
+                                                                "anywhere",
+                                                        }}
+                                                    >
+                                                        Заявка №{" "}
+                                                        {String(
+                                                            request.requestNumber ??
+                                                            request.number ??
+                                                            request.id
+                                                        ).slice(0, 8)}
                                                     </Typography>
+
                                                     <Chip
                                                         label={info.label}
                                                         color={info.color}
@@ -1105,19 +1542,36 @@ export default function MyRequestsPage() {
                                                     />
                                                 </Stack>
 
-                                                <Stack direction="row" spacing={1} alignItems="center">
-                                                    <AccessTimeIcon fontSize="small" color="action" />
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        Создана: {formatDate(request.createdAt)}
+                                                <Stack
+                                                    direction="row"
+                                                    spacing={1}
+                                                    alignItems="center"
+                                                >
+                                                    <AccessTimeIcon
+                                                        fontSize="small"
+                                                        color="action"
+                                                    />
+
+                                                    <Typography
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                    >
+                                                        Создана:{" "}
+                                                        {formatDate(
+                                                            request.createdAt
+                                                        )}
                                                     </Typography>
                                                 </Stack>
                                             </Stack>
-
                                         </Stack>
 
                                         <Divider sx={{ my: 2 }} />
+
                                         <Stack
-                                            direction={{ xs: "column", md: "row" }}
+                                            direction={{
+                                                xs: "column",
+                                                md: "row",
+                                            }}
                                             alignItems="stretch"
                                             spacing={2}
                                         >
@@ -1128,27 +1582,42 @@ export default function MyRequestsPage() {
                                                     border: "1px solid",
                                                     borderColor: "divider",
                                                     borderRadius: 2,
-                                                    backgroundColor: "background.default",
-                                                    p: { xs: 1.5, md: 2 },
+                                                    backgroundColor:
+                                                        "background.default",
+                                                    p: {
+                                                        xs: 1.5,
+                                                        md: 2,
+                                                    },
                                                     overflow: "hidden",
                                                 }}
                                             >
-                                                <RequestWorkflow status={request.status} />
+                                                <RequestWorkflow
+                                                    status={request.status}
+                                                />
                                             </Box>
+
                                             <Box
                                                 sx={{
-                                                    minWidth: { xs: "auto", md: 180 },
+                                                    minWidth: {
+                                                        xs: "auto",
+                                                        md: 180,
+                                                    },
                                                     display: "flex",
                                                     alignItems: "center",
                                                     justifyContent: "center",
-                                                    px: { xs: 0, md: 1 },
+                                                    px: {
+                                                        xs: 0,
+                                                        md: 1,
+                                                    },
                                                 }}
                                             >
                                                 <Typography
                                                     variant="body2"
                                                     color="primary.main"
                                                     fontWeight={600}
-                                                    sx={{ textAlign: "center" }}
+                                                    sx={{
+                                                        textAlign: "center",
+                                                    }}
                                                 >
                                                     Нажмите, чтобы открыть
                                                 </Typography>
@@ -1173,7 +1642,12 @@ export default function MyRequestsPage() {
                     <Typography variant="h6" fontWeight={800}>
                         Создание заявки
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+
+                    <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mt: 0.5 }}
+                    >
                         Опишите проблему и укажите удобное время визита.
                     </Typography>
                 </DialogTitle>
@@ -1181,11 +1655,18 @@ export default function MyRequestsPage() {
                 <DialogContent>
                     <Stack spacing={2.5} sx={{ pt: 1 }}>
                         {createError && (
-                            <Alert severity="error" onClose={() => setCreateError("")}>
+                            <Alert
+                                severity="error"
+                                onClose={() => setCreateError("")}
+                            >
                                 {createError}
                             </Alert>
                         )}
-                        <Typography variant="subtitle2" fontWeight={700}>
+
+                        <Typography
+                            variant="subtitle2"
+                            fontWeight={700}
+                        >
                             Контактные данные
                         </Typography>
 
@@ -1194,35 +1675,66 @@ export default function MyRequestsPage() {
                                 <TextField
                                     label="ФИО клиента"
                                     fullWidth
-                                    value={[user?.lastName, user?.firstName, user?.middleName].filter(Boolean).join(" ") || "Не указано"}
-                                    slotProps={{ input: { readOnly: true } }}
+                                    value={
+                                        [
+                                            user?.lastName,
+                                            user?.firstName,
+                                            user?.middleName,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" ") || "Не указано"
+                                    }
+                                    slotProps={{
+                                        input: { readOnly: true },
+                                    }}
                                     sx={{
-                                        "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                        "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                        "& .MuiInputBase-root": {
+                                            backgroundColor: "#F3F4F6",
+                                        },
+                                        "& .MuiInputBase-input": {
+                                            color: "#6B7280",
+                                            cursor: "default",
+                                        },
                                     }}
                                 />
                             </Grid>
+
                             <Grid size={{ xs: 12, sm: 6 }}>
                                 <TextField
                                     label="Телефон"
                                     fullWidth
                                     value={user?.phone || "Не указан"}
-                                    slotProps={{ input: { readOnly: true } }}
+                                    slotProps={{
+                                        input: { readOnly: true },
+                                    }}
                                     sx={{
-                                        "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                        "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                        "& .MuiInputBase-root": {
+                                            backgroundColor: "#F3F4F6",
+                                        },
+                                        "& .MuiInputBase-input": {
+                                            color: "#6B7280",
+                                            cursor: "default",
+                                        },
                                     }}
                                 />
                             </Grid>
+
                             <Grid size={{ xs: 12, sm: 6 }}>
                                 <TextField
                                     label="Электронная почта"
                                     fullWidth
                                     value={user?.email || "Не указана"}
-                                    slotProps={{ input: { readOnly: true } }}
+                                    slotProps={{
+                                        input: { readOnly: true },
+                                    }}
                                     sx={{
-                                        "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                        "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                        "& .MuiInputBase-root": {
+                                            backgroundColor: "#F3F4F6",
+                                        },
+                                        "& .MuiInputBase-input": {
+                                            color: "#6B7280",
+                                            cursor: "default",
+                                        },
                                     }}
                                 />
                             </Grid>
@@ -1230,14 +1742,27 @@ export default function MyRequestsPage() {
 
                         <Divider />
 
-                        <Typography variant="subtitle2" fontWeight={700}>
+                        <Typography
+                            variant="subtitle2"
+                            fontWeight={700}
+                        >
                             Место обслуживания
                         </Typography>
 
                         {formDataLoading && (
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                }}
+                            >
                                 <CircularProgress size={18} />
-                                <Typography variant="body2" color="text.secondary">
+
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Загружаем адреса и оборудование...
                                 </Typography>
                             </Box>
@@ -1247,12 +1772,22 @@ export default function MyRequestsPage() {
                             label="Город"
                             fullWidth
                             value={
-                                createAddress?.cityName || createAddress?.city?.name || createAddress?.city || "Не указан"
+                                createAddress?.cityName ||
+                                createAddress?.city?.name ||
+                                createAddress?.city ||
+                                "Не указан"
                             }
-                            slotProps={{ input: { readOnly: true } }}
+                            slotProps={{
+                                input: { readOnly: true },
+                            }}
                             sx={{
-                                "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                "& .MuiInputBase-root": {
+                                    backgroundColor: "#F3F4F6",
+                                },
+                                "& .MuiInputBase-input": {
+                                    color: "#6B7280",
+                                    cursor: "default",
+                                },
                             }}
                         />
 
@@ -1260,12 +1795,22 @@ export default function MyRequestsPage() {
                             label="Улица"
                             fullWidth
                             value={
-                                createAddress?.streetName || createAddress?.street?.name || createAddress?.street || "Не указана"
+                                createAddress?.streetName ||
+                                createAddress?.street?.name ||
+                                createAddress?.street ||
+                                "Не указана"
                             }
-                            slotProps={{ input: { readOnly: true } }}
+                            slotProps={{
+                                input: { readOnly: true },
+                            }}
                             sx={{
-                                "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                "& .MuiInputBase-root": {
+                                    backgroundColor: "#F3F4F6",
+                                },
+                                "& .MuiInputBase-input": {
+                                    color: "#6B7280",
+                                    cursor: "default",
+                                },
                             }}
                         />
 
@@ -1278,12 +1823,23 @@ export default function MyRequestsPage() {
                                 createAddress?.house?.number ||
                                 createAddress?.house?.houseNumber ||
                                 createAddress?.house?.name ||
-                                (createAddress?.houseId != null ? `Дом ${createAddress.houseId}` : "Не указан")
+                                (
+                                    createAddress?.houseId != null
+                                        ? `Дом ${createAddress.houseId}`
+                                        : "Не указан"
+                                )
                             }
-                            slotProps={{ input: { readOnly: true } }}
+                            slotProps={{
+                                input: { readOnly: true },
+                            }}
                             sx={{
-                                "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                "& .MuiInputBase-root": {
+                                    backgroundColor: "#F3F4F6",
+                                },
+                                "& .MuiInputBase-input": {
+                                    color: "#6B7280",
+                                    cursor: "default",
+                                },
                             }}
                             helperText={
                                 createAddress?.houseId != null
@@ -1296,10 +1852,17 @@ export default function MyRequestsPage() {
                             label="Квартира"
                             fullWidth
                             value={form.apartment || "Не указана"}
-                            slotProps={{ input: { readOnly: true } }}
+                            slotProps={{
+                                input: { readOnly: true },
+                            }}
                             sx={{
-                                "& .MuiInputBase-root": { backgroundColor: "#F3F4F6" },
-                                "& .MuiInputBase-input": { color: "#6B7280", cursor: "default" },
+                                "& .MuiInputBase-root": {
+                                    backgroundColor: "#F3F4F6",
+                                },
+                                "& .MuiInputBase-input": {
+                                    color: "#6B7280",
+                                    cursor: "default",
+                                },
                             }}
                             helperText="Квартира подставлена из адреса, полученного от Request Service."
                         />
@@ -1313,29 +1876,50 @@ export default function MyRequestsPage() {
                             disabled={formDataLoading}
                             error={Boolean(createFieldErrors.equipmentId)}
                             onChange={(event) => {
-                                setCreateFieldErrors((previous) => ({ ...previous, equipmentId: "" }));
+                                setCreateFieldErrors((previous) => ({
+                                    ...previous,
+                                    equipmentId: "",
+                                }));
+
                                 setCreateError("");
+
                                 setForm((previous) => ({
                                     ...previous,
                                     equipmentId: event.target.value,
                                 }));
                             }}
-                            helperText={createFieldErrors.equipmentId || "Обязательно. Если оборудование не отображается, проверьте его наличие в профиле/адресе."}
+                            helperText={
+                                createFieldErrors.equipmentId ||
+                                "Обязательно. Если оборудование не отображается, проверьте его наличие в профиле/адресе."
+                            }
                         >
-                            <MenuItem value="" disabled>Выберите оборудование</MenuItem>
+                            <MenuItem value="" disabled>
+                                Выберите оборудование
+                            </MenuItem>
+
                             {equipment.map((item) => (
-                                <MenuItem key={item.id} value={String(item.id)}>
+                                <MenuItem
+                                    key={item.id}
+                                    value={String(item.id)}
+                                >
                                     {[
-                                        item.equipmentTypeName || item.typeName,
+                                        item.equipmentTypeName ||
+                                        item.typeName,
                                         item.model,
-                                    ].filter(Boolean).join(" ") || `Оборудование ${String(item.id).slice(0, 8)}`}
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" ") ||
+                                        `Оборудование ${String(item.id).slice(0, 8)}`}
                                 </MenuItem>
                             ))}
                         </TextField>
 
                         <Divider />
 
-                        <Typography variant="subtitle2" fontWeight={700}>
+                        <Typography
+                            variant="subtitle2"
+                            fontWeight={700}
+                        >
                             Описание обращения
                         </Typography>
 
@@ -1348,11 +1932,21 @@ export default function MyRequestsPage() {
                             fullWidth
                             value={form.problemDescription}
                             inputProps={{ maxLength: 5000 }}
-                            error={Boolean(createFieldErrors.problemDescription)}
-                            helperText={createFieldErrors.problemDescription || `${form.problemDescription.length}/5000. Минимум 5 символов: опишите неисправность и что происходит.`}
+                            error={Boolean(
+                                createFieldErrors.problemDescription
+                            )}
+                            helperText={
+                                createFieldErrors.problemDescription ||
+                                `${form.problemDescription.length}/5000. Минимум 5 символов: опишите неисправность и что происходит.`
+                            }
                             onChange={(event) => {
-                                setCreateFieldErrors((previous) => ({ ...previous, problemDescription: "" }));
+                                setCreateFieldErrors((previous) => ({
+                                    ...previous,
+                                    problemDescription: "",
+                                }));
+
                                 setCreateError("");
+
                                 setForm((previous) => ({
                                     ...previous,
                                     problemDescription: event.target.value,
@@ -1371,6 +1965,7 @@ export default function MyRequestsPage() {
                             helperText={`${form.clientComment.length}/2000`}
                             onChange={(event) => {
                                 setCreateError("");
+
                                 setForm((previous) => ({
                                     ...previous,
                                     clientComment: event.target.value,
@@ -1383,26 +1978,39 @@ export default function MyRequestsPage() {
                             type="datetime-local"
                             fullWidth
                             value={form.preferredVisitAt}
-                            error={Boolean(createFieldErrors.preferredVisitAt)}
+                            error={Boolean(
+                                createFieldErrors.preferredVisitAt
+                            )}
                             variant="outlined"
                             InputLabelProps={{ shrink: true }}
                             slotProps={{
                                 inputLabel: { shrink: true },
                                 htmlInput: {
                                     min: new Date(
-                                    Date.now() - new Date().getTimezoneOffset() * 60000
-                                    ).toISOString().slice(0, 16),
+                                        Date.now() -
+                                        new Date().getTimezoneOffset() * 60000
+                                    )
+                                        .toISOString()
+                                        .slice(0, 16),
                                 },
                             }}
                             onChange={(event) => {
-                                setCreateFieldErrors((previous) => ({ ...previous, preferredVisitAt: "" }));
+                                setCreateFieldErrors((previous) => ({
+                                    ...previous,
+                                    preferredVisitAt: "",
+                                }));
+
                                 setCreateError("");
+
                                 setForm((previous) => ({
                                     ...previous,
                                     preferredVisitAt: event.target.value,
                                 }));
                             }}
-                            helperText={createFieldErrors.preferredVisitAt || "Необязательно. Если указали дату, она должна быть в будущем. Прошедшее время backend отклонит."}
+                            helperText={
+                                createFieldErrors.preferredVisitAt ||
+                                "Необязательно. Если указали дату, она должна быть в будущем. Прошедшее время backend отклонит."
+                            }
                         />
                     </Stack>
                 </DialogContent>
@@ -1418,7 +2026,9 @@ export default function MyRequestsPage() {
                     <Button
                         variant="contained"
                         startIcon={
-                            creating ? <CircularProgress size={18} /> : <AddIcon />
+                            creating
+                                ? <CircularProgress size={18} />
+                                : <AddIcon />
                         }
                         onClick={handleCreate}
                         disabled={
@@ -1454,7 +2064,12 @@ export default function MyRequestsPage() {
                     <Typography variant="h6" fontWeight={800}>
                         Редактирование заявки № {selectedRequest?.id}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+
+                    <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mt: 0.5 }}
+                    >
                         Изменить описание, комментарий и желаемое время визита можно до принятия заявки мастером.
                     </Typography>
                 </DialogTitle>
@@ -1462,12 +2077,19 @@ export default function MyRequestsPage() {
                 <DialogContent>
                     <Stack spacing={2.5} sx={{ pt: 1 }}>
                         {createError && (
-                            <Alert severity="error" onClose={() => setCreateError("")}>
+                            <Alert
+                                severity="error"
+                                onClose={() => setCreateError("")}
+                            >
                                 {createError}
                             </Alert>
                         )}
+
                         {editError && (
-                            <Alert severity="error" onClose={() => setEditError("")}>
+                            <Alert
+                                severity="error"
+                                onClose={() => setEditError("")}
+                            >
                                 {editError}
                             </Alert>
                         )}
@@ -1481,10 +2103,14 @@ export default function MyRequestsPage() {
                             fullWidth
                             value={editForm.problemDescription}
                             inputProps={{ maxLength: 5000 }}
-                            error={Boolean(editError) && editForm.problemDescription.trim().length < 5}
+                            error={
+                                Boolean(editError) &&
+                                editForm.problemDescription.trim().length < 5
+                            }
                             helperText={`${editForm.problemDescription.length}/5000. Минимум 5 символов.`}
                             onChange={(event) => {
                                 setEditError("");
+
                                 setEditForm((previous) => ({
                                     ...previous,
                                     problemDescription: event.target.value,
@@ -1503,6 +2129,7 @@ export default function MyRequestsPage() {
                             helperText={`${editForm.clientComment.length}/2000`}
                             onChange={(event) => {
                                 setEditError("");
+
                                 setEditForm((previous) => ({
                                     ...previous,
                                     clientComment: event.target.value,
@@ -1519,12 +2146,16 @@ export default function MyRequestsPage() {
                                 inputLabel: { shrink: true },
                                 htmlInput: {
                                     min: new Date(
-                                        Date.now() - new Date().getTimezoneOffset() * 60000
-                                    ).toISOString().slice(0, 16),
+                                        Date.now() -
+                                        new Date().getTimezoneOffset() * 60000
+                                    )
+                                        .toISOString()
+                                        .slice(0, 16),
                                 },
                             }}
                             onChange={(event) => {
                                 setEditError("");
+
                                 setEditForm((previous) => ({
                                     ...previous,
                                     preferredVisitAt: event.target.value,
@@ -1545,13 +2176,23 @@ export default function MyRequestsPage() {
                     >
                         Отмена
                     </Button>
+
                     <Button
                         variant="contained"
                         onClick={handleEdit}
-                        disabled={editing || editForm.problemDescription.trim().length < 5}
-                        startIcon={editing ? <CircularProgress size={18} /> : <EditOutlinedIcon />}
+                        disabled={
+                            editing ||
+                            editForm.problemDescription.trim().length < 5
+                        }
+                        startIcon={
+                            editing
+                                ? <CircularProgress size={18} />
+                                : <EditOutlinedIcon />
+                        }
                     >
-                        {editing ? "Сохранение..." : "Сохранить изменения"}
+                        {editing
+                            ? "Сохранение..."
+                            : "Сохранить изменения"}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -1564,21 +2205,32 @@ export default function MyRequestsPage() {
                 fullWidth
             >
                 <DialogTitle>Отменить заявку?</DialogTitle>
+
                 <DialogContent>
                     <Typography color="text.secondary">
-                        Вы действительно хотите отменить заявку № {cancelTarget?.id}? Это действие изменит её статус.
+                        Вы действительно хотите отменить заявку №{" "}
+                        {cancelTarget?.id}? Это действие изменит её статус.
                     </Typography>
                 </DialogContent>
+
                 <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={() => setCancelTarget(null)} disabled={cancelling}>
+                    <Button
+                        onClick={() => setCancelTarget(null)}
+                        disabled={cancelling}
+                    >
                         Не отменять
                     </Button>
+
                     <Button
                         color="error"
                         variant="contained"
                         onClick={handleCancelRequest}
                         disabled={cancelling}
-                        startIcon={cancelling ? <CircularProgress size={18} /> : <CancelOutlinedIcon />}
+                        startIcon={
+                            cancelling
+                                ? <CircularProgress size={18} />
+                                : <CancelOutlinedIcon />
+                        }
                     >
                         {cancelling ? "Отмена..." : "Да, отменить"}
                     </Button>

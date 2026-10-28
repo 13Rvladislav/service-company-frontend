@@ -30,6 +30,7 @@ import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
 import { getCurrentProfile } from "../api/userApi";
@@ -322,6 +323,7 @@ function RequestDetailsDialog({
     onRetry,
     onAccept,
     onReject,
+    onOpenReport,
 }) {
     if (!request) {
         return null;
@@ -597,6 +599,19 @@ function RequestDetailsDialog({
                             <RequestWorkflow status={request.status} />
                         </Box>
 
+                        {(["IN_PROGRESS", "REPORT_SUBMITTED", "COMPLETED"].includes(request.status)) && (
+                            <Box sx={{ display: "flex", justifyContent: "flex-start" }}>
+                                <Button
+                                    variant="contained"
+                                    startIcon={<AssignmentOutlinedIcon />}
+                                    onClick={onOpenReport}
+                                    sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+                                >
+                                    {request.status === "IN_PROGRESS" ? "Открыть отчёт / заполнить" : "Просмотреть отправленный отчёт"}
+                                </Button>
+                            </Box>
+                        )}
+
                         {canRespond ? (
                             <Alert severity="info" sx={{ borderRadius: 2 }}>
                                 Заявка назначена вам. После принятия её статус
@@ -685,6 +700,311 @@ function RequestDetailsDialog({
     );
 }
 
+
+const REPORT_API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8084/api";
+
+function emptyReport() {
+    return {
+        diagnosis: "",
+        failureCause: "",
+        performedWork: "",
+        workResult: "",
+        recommendations: "",
+        masterComment: "",
+        completedAt: "",
+    };
+}
+
+function toLocalDateTime(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+async function reportRequest(url, options = {}) {
+    const response = await fetch(`${REPORT_API_BASE}${url}`, {
+        credentials: "include",
+        ...options,
+    });
+
+    if (!response.ok) {
+        let message = `Ошибка запроса (${response.status})`;
+        let responseBody = null;
+
+        try {
+            responseBody = await response.json();
+            message = responseBody.message || responseBody.detail || message;
+        } catch {
+            // Ответ может быть не JSON.
+        }
+
+        const error = new Error(message);
+        error.status = response.status;
+        error.responseBody = responseBody;
+        throw error;
+    }
+
+    if (response.status === 204) return null;
+
+    const type = response.headers.get("content-type") || "";
+    return type.includes("application/json") ? response.json() : response.blob();
+}
+
+function WorkReportDialog({ request, onClose, onSubmitted }) {
+    const readOnly = ["REPORT_SUBMITTED", "COMPLETED"].includes(request?.status);
+    const [report, setReport] = useState(emptyReport);
+    const [attachments, setAttachments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [deletingAttachmentId, setDeletingAttachmentId] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [downloadingPdf, setDownloadingPdf] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+
+    const loadReport = useCallback(async () => {
+        if (!request?.id) return;
+        setLoading(true); setError("");
+        try {
+            const lookup = await reportRequest(`/requests/${request.id}/report`);
+
+            // Новый backend-контракт: { exists: false, report: null }
+            // или { exists: true, report: WorkReportResponse }.
+            // Поддерживаем и старый контракт на случай, если backend ещё не обновлён.
+            const data = lookup && Object.prototype.hasOwnProperty.call(lookup, "exists")
+                ? (lookup.exists ? lookup.report : null)
+                : lookup;
+
+            if (!data) {
+                setReport(emptyReport());
+                setAttachments([]);
+                setSaved(false);
+                setError("");
+                return;
+            }
+
+            setReport({
+                ...emptyReport(),
+                ...data,
+                completedAt: toLocalDateTime(data?.completedAt),
+            });
+            setAttachments(Array.isArray(data?.attachments) ? data.attachments : []);
+            setSaved(Boolean(data?.id));
+        } catch (e) {
+            setError(e.message || "Не удалось загрузить отчёт.");
+        } finally { setLoading(false); }
+    }, [request?.id]);
+
+    useEffect(() => { loadReport(); }, [loadReport]);
+
+    const update = (field) => (event) => {
+        setReport((previous) => ({ ...previous, [field]: event.target.value }));
+    };
+
+    const saveDraft = async () => {
+        setSaving(true); setError(""); setSuccess("");
+        try {
+            const payload = { ...report, completedAt: report.completedAt || null };
+            const data = await reportRequest(`/requests/${request.id}/report`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            setReport((previous) => ({ ...previous, ...data, completedAt: toLocalDateTime(data?.completedAt ?? previous.completedAt) }));
+            setAttachments(Array.isArray(data?.attachments) ? data.attachments : attachments);
+            setSaved(true);
+            setSuccess("Черновик сохранён. Теперь можно прикреплять файлы.");
+            return true;
+        } catch (e) {
+            setError(e.message || "Не удалось сохранить черновик.");
+            return false;
+        } finally { setSaving(false); }
+    };
+
+    const uploadFile = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) { setError("Размер файла не должен превышать 10 МБ."); return; }
+        setUploading(true); setError(""); setSuccess("");
+        try {
+            const formData = new FormData(); formData.append("file", file);
+            const item = await reportRequest(`/requests/${request.id}/report/attachments`, { method: "POST", body: formData });
+            setAttachments((previous) => [...previous, item]);
+            setSuccess("Файл прикреплён.");
+        } catch (e) { setError(e.message || "Не удалось прикрепить файл."); }
+        finally { setUploading(false); }
+    };
+
+    const openAttachment = async (attachment) => {
+        setError("");
+        try {
+            const blob = await reportRequest(`/requests/${request.id}/report/attachments/${attachment.id}`);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a"); link.href = url; link.download = attachment.originalFileName || "attachment";
+            document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+        } catch (e) { setError(e.message || "Не удалось открыть файл."); }
+    };
+
+    const deleteAttachment = async (attachment) => {
+        if (readOnly || !saved || uploading || saving || submitting) return;
+        const fileName = attachment.originalFileName || "этот файл";
+        if (!window.confirm(`Удалить вложение «${fileName}»?`)) return;
+
+        setDeletingAttachmentId(attachment.id);
+        setError("");
+        setSuccess("");
+        try {
+            await reportRequest(
+                `/requests/${request.id}/report/attachments/${attachment.id}`,
+                { method: "DELETE" }
+            );
+            setAttachments((previous) => previous.filter((item) => item.id !== attachment.id));
+            setSuccess("Вложение удалено.");
+        } catch (e) {
+            setError(e.message || "Не удалось удалить вложение.");
+        } finally {
+            setDeletingAttachmentId(null);
+        }
+    };
+
+    const downloadPdf = async () => {
+        setDownloadingPdf(true);
+        setError("");
+        try {
+            const blob = await reportRequest(`/requests/${request.id}/report/pdf`);
+            if (!(blob instanceof Blob)) {
+                throw new Error("Сервер не вернул PDF-файл.");
+            }
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `request-report-${request.id}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+            setError(e.message || "Не удалось скачать PDF-отчёт.");
+        } finally {
+            setDownloadingPdf(false);
+        }
+    };
+
+    const submit = async () => {
+        setSubmitting(true); setError(""); setSuccess("");
+        try {
+            if (!saved) {
+                const draftSaved = await saveDraft();
+                if (!draftSaved) return;
+            }
+            // Всегда сохраняем последние изменения перед отправкой.
+            const payload = { ...report, completedAt: report.completedAt || null };
+            await reportRequest(`/requests/${request.id}/report`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+            const submittedReport = await reportRequest(`/requests/${request.id}/report/submit`, { method: "POST" });
+            if (submittedReport && typeof submittedReport === "object") {
+                setReport((previous) => ({ ...previous, ...submittedReport }));
+            }
+            setSuccess("Отчёт отправлен.");
+            await onSubmitted();
+        } catch (e) { setError(e.message || "Не удалось отправить отчёт."); }
+        finally { setSubmitting(false); }
+    };
+
+    const field = (name, label, required = false, multiline = true) => (
+        <TextField key={name} label={label} value={report[name] || ""} onChange={update(name)} required={required} fullWidth multiline={multiline} minRows={multiline ? 2 : undefined} disabled={readOnly || loading || saving || submitting} InputLabelProps={name === "completedAt" ? { shrink: true } : undefined} sx={{ minWidth: 0, "& .MuiInputBase-root": { alignItems: multiline ? "flex-start" : "center" }, "& input": { boxSizing: "border-box" } }} />
+    );
+
+    return <Dialog open onClose={() => !saving && !submitting && onClose()} maxWidth="md" fullWidth>
+        <DialogTitle>{readOnly ? "Отправленный отчёт мастера" : "Отчёт мастера"} — заявка №{String(request.id)}</DialogTitle>
+        <DialogContent dividers>
+            {loading ? <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}><CircularProgress /></Box> : <Stack spacing={2} sx={{ pt: 1 }}>
+                {error && <Alert severity="error" onClose={() => setError("")}>{error}</Alert>}
+                {success && <Alert severity="success" onClose={() => setSuccess("")}>{success}</Alert>}
+                {readOnly && <Alert severity="info">Отчёт уже отправлен. Доступен только просмотр, редактирование отключено.</Alert>}
+                {!readOnly && <Alert severity="info"><Typography fontWeight={800} component="span">Важно: перед прикреплением файлов сохраните черновик отчёта.</Typography><br />1. Заполните поля отчёта.<br />2. Нажмите «Сохранить черновик».<br />3. После успешного сохранения прикрепите фотографии или PDF-файлы.<br />Допустимые форматы: JPEG, PNG, WEBP, PDF. Максимальный размер — 10 МБ.</Alert>}
+                {field("diagnosis", "Результаты диагностики", true)}
+                {field("failureCause", "Причина неисправности")}
+                {field("performedWork", "Выполненные работы", true)}
+                {field("workResult", "Результат ремонта", true)}
+                {field("recommendations", "Рекомендации клиенту")}
+                {field("masterComment", "Комментарий мастера")}
+                <Box sx={{ minWidth: 0, width: "100%" }}>
+                    <Typography
+                        component="label"
+                        htmlFor="work-report-completed-at"
+                        variant="body2"
+                        color="text.secondary"
+                        fontWeight={600}
+                        sx={{ display: "block", mb: 0.75 }}
+                    >
+                        Дата выполнения работ
+                    </Typography>
+                    <TextField
+                        id="work-report-completed-at"
+                        type="datetime-local"
+                        value={report.completedAt || ""}
+                        onChange={update("completedAt")}
+                        fullWidth
+                        disabled={readOnly || loading || saving || submitting}
+                        inputProps={{ "aria-label": "Дата выполнения работ" }}
+                        sx={{
+                            minWidth: 0,
+                            width: "100%",
+                            "& .MuiInputBase-root": { minWidth: 0, width: "100%" },
+                            "& input": { boxSizing: "border-box", minWidth: 0, width: "100%" },
+                        }}
+                    />
+                </Box>
+                <Divider />
+                <Typography variant="h6" fontWeight={800}>Вложения</Typography>
+                {!readOnly && <Button component="label" variant="outlined" disabled={!saved || uploading || saving || submitting} sx={{ alignSelf: "flex-start", textTransform: "none" }}>
+                    {uploading ? "Загрузка файла..." : "Прикрепить файл"}<input hidden type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" onChange={uploadFile} />
+                </Button>}
+                {!readOnly && !saved && <Alert severity="warning">Сначала нажмите «Сохранить черновик». До сохранения загрузка файлов недоступна.</Alert>}
+                {attachments.length === 0 ? <Typography color="text.secondary">Вложения отсутствуют.</Typography> : <Stack spacing={1}>{attachments.map((item) => <Box key={item.id} sx={{ display: "flex", gap: 1, alignItems: "center", justifyContent: "space-between", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.25 }}><Box sx={{ minWidth: 0, flex: 1 }}><Typography sx={{ overflowWrap: "anywhere" }}>{item.originalFileName || "Файл"}</Typography><Typography variant="caption" color="text.secondary">{item.sizeBytes ? `${(item.sizeBytes / 1024 / 1024).toFixed(2)} МБ` : ""}</Typography></Box><Stack direction="row" spacing={0.5} alignItems="center"><Button onClick={() => openAttachment(item)} size="small" sx={{ textTransform: "none", flexShrink: 0 }}>Открыть</Button>{!readOnly && <Button onClick={() => deleteAttachment(item)} size="small" color="error" startIcon={deletingAttachmentId === item.id ? <CircularProgress size={14} /> : undefined} disabled={!saved || uploading || saving || submitting || deletingAttachmentId !== null} sx={{ textTransform: "none", flexShrink: 0 }}>{deletingAttachmentId === item.id ? "Удаление..." : "Удалить"}</Button>}</Stack></Box>)}</Stack>}
+            </Stack>}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1, flexWrap: "wrap" }}>
+            {readOnly && report?.id && (
+                <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={downloadingPdf ? <CircularProgress size={14} /> : <DownloadOutlinedIcon sx={{ fontSize: 17 }} />}
+                    onClick={downloadPdf}
+                    disabled={loading || downloadingPdf}
+                    sx={{
+                        mr: "auto",
+                        px: 1.5,
+                        py: 0.75,
+                        minWidth: 0,
+                        borderColor: "primary.main",
+                        color: "primary.main",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        textTransform: "none",
+                        whiteSpace: "nowrap",
+                        "& .MuiButton-startIcon": { mr: 0.75 },
+                        "&:hover": {
+                            borderColor: "primary.dark",
+                            backgroundColor: "action.hover",
+                        },
+                    }}
+                >
+                    {downloadingPdf ? "Формирование PDF..." : "Скачать PDF"}
+                </Button>
+            )}
+            <Button onClick={onClose} disabled={saving || submitting || uploading || deletingAttachmentId !== null || downloadingPdf} sx={{ textTransform: "none" }}>Закрыть</Button>
+            {!readOnly && <><Button variant="outlined" onClick={saveDraft} disabled={loading || saving || submitting || uploading || deletingAttachmentId !== null} sx={{ textTransform: "none" }}>{saving ? "Сохранение..." : "Сохранить черновик"}</Button><Button variant="contained" onClick={submit} disabled={loading || saving || submitting || uploading || deletingAttachmentId !== null} sx={{ textTransform: "none" }}>{submitting ? "Отправка..." : "Отправить отчёт"}</Button></>}
+        </DialogActions>
+    </Dialog>;
+}
+
 export default function MasterRequestPage() {
     const [user, setUser] = useState(null);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -707,6 +1027,7 @@ export default function MasterRequestPage() {
 
     const [actionLoading, setActionLoading] = useState(false);
     const [confirmation, setConfirmation] = useState(null);
+    const [reportRequest, setReportRequest] = useState(null);
 
     const isMaster = user?.role === "ENGINEER";
 
@@ -1440,7 +1761,22 @@ export default function MasterRequestPage() {
                     onRetry={refreshDetails}
                     onAccept={handleAccept}
                     onReject={handleReject}
+                    onOpenReport={() => setReportRequest(details)}
                 />
+
+                {reportRequest && (
+                    <WorkReportDialog
+                        request={reportRequest}
+                        onClose={() => setReportRequest(null)}
+                        onSubmitted={async () => {
+                            setReportRequest(null);
+                            setSelectedRequest(null);
+                            setDetails(null);
+                            await loadRequests(true);
+                            setSuccess(`Отчёт по заявке №${String(reportRequest.id)} отправлен.`);
+                        }}
+                    />
+                )}
 
                 {/* Подтверждение принятия или отклонения */}
                 <Dialog

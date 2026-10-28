@@ -35,6 +35,7 @@ import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 
 import MainLayout from "../components/layout/MainLayout";
+import WorkReportViewer from "../components/requests/WorkReportViewer";
 import { getCurrentProfile } from "../api/userApi";
 
 import {
@@ -164,10 +165,6 @@ function formatDate(value) {
     }).format(date);
 }
 
-/**
- * Визуальная цепочка прохождения заявки.
- * Статусы берутся из фактического поля request.status.
- */
 function workflowIndex(status) {
     if (status === "REVISION_REQUIRED") return 5;
     if (status === "CANCELLED" || status === "REJECTED") return -1;
@@ -193,7 +190,9 @@ function RequestWorkflow({ status, compact = false }) {
                 alternativeLabel
                 sx={{
                     minWidth: compact ? 520 : 600,
-                    "& .MuiStepLabel-label": { fontSize: compact ? 10 : 12 },
+                    "& .MuiStepLabel-label": {
+                        fontSize: compact ? 10 : 12,
+                    },
                 }}
             >
                 {WORKFLOW.map((step) => (
@@ -203,7 +202,11 @@ function RequestWorkflow({ status, compact = false }) {
                 ))}
             </Stepper>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 1 }}
+            >
                 {info.description}
             </Typography>
         </Box>
@@ -229,6 +232,7 @@ function getPersonName(person, fallback = "Не указан") {
 
     return (
         name ||
+        person.name ||
         (person.masterId
             ? `Мастер #${person.masterId}`
             : fallback)
@@ -256,9 +260,7 @@ function getReadableAddress(request) {
                 address.house?.number ||
                 address.house?.houseNumber,
             apartment,
-        ].filter(
-            (part) => part && typeof part !== "object"
-        );
+        ].filter((part) => part && typeof part !== "object");
 
         if (parts.length) {
             return parts.join(", ");
@@ -266,24 +268,14 @@ function getReadableAddress(request) {
     }
 
     if (typeof address === "string" && address.trim()) {
-        return [
-            address.trim(),
-            apartment,
-        ]
-            .filter(Boolean)
-            .join(", ");
+        return [address.trim(), apartment].filter(Boolean).join(", ");
     }
 
     const fallback = request?.addressId
         ? `ID адреса: ${request.addressId}`
         : "Адрес не предоставлен backend";
 
-    return [
-        fallback,
-        apartment,
-    ]
-        .filter(Boolean)
-        .join(", ");
+    return [fallback, apartment].filter(Boolean).join(", ");
 }
 
 function getReadableEquipment(request) {
@@ -308,10 +300,7 @@ function getReadableEquipment(request) {
 
 function getAssignmentErrorMessage(error) {
     const status = error?.status;
-
-    const rawMessage = String(
-        error?.message || ""
-    ).toLowerCase();
+    const rawMessage = String(error?.message || "").toLowerCase();
 
     if (status === 400 || rawMessage.includes("специализац")) {
         return "Нельзя назначить этого мастера: его специализация не соответствует оборудованию заявки.";
@@ -359,10 +348,7 @@ function MasterName({ master }) {
             </Typography>
 
             {master.phone && (
-                <Typography
-                    variant="body2"
-                    color="text.secondary"
-                >
+                <Typography variant="body2" color="text.secondary">
                     {master.phone}
                 </Typography>
             )}
@@ -416,15 +402,9 @@ function RequestDetailsDialog({
         >
             <DialogTitle>
                 <Stack
-                    direction={{
-                        xs: "column",
-                        sm: "row",
-                    }}
+                    direction={{ xs: "column", sm: "row" }}
                     justifyContent="space-between"
-                    alignItems={{
-                        xs: "flex-start",
-                        sm: "center",
-                    }}
+                    alignItems={{ xs: "flex-start", sm: "center" }}
                     spacing={1}
                 >
                     <Box>
@@ -436,10 +416,7 @@ function RequestDetailsDialog({
                             Карточка заявки
                         </Typography>
 
-                        <Typography
-                            variant="body2"
-                            color="text.secondary"
-                        >
+                        <Typography variant="body2" color="text.secondary">
                             №{" "}
                             {String(
                                 request.requestNumber ??
@@ -457,7 +434,14 @@ function RequestDetailsDialog({
                 </Stack>
             </DialogTitle>
 
-            <DialogContent dividers sx={{ px: { xs: 2, sm: 3 }, py: 3, bgcolor: "grey.50" }}>
+            <DialogContent
+                dividers
+                sx={{
+                    px: { xs: 2, sm: 3 },
+                    py: 3,
+                    bgcolor: "grey.50",
+                }}
+            >
                 {loading ? (
                     <Box
                         sx={{
@@ -485,125 +469,226 @@ function RequestDetailsDialog({
                     </Alert>
                 ) : (
                     <Stack spacing={2.5}>
-                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.75, sm: 2.5 } }}>
-                    <Typography variant="subtitle1" fontWeight={800} mb={2}>Информация о заявке</Typography>
-                    <Grid container spacing={2.25}>
-                        {[
-                            ["Клиент", getPersonName(
-                                request.client || request.clientInfo || {
-                                    lastName: request.clientLastName,
-                                    firstName: request.clientFirstName,
-                                    middleName: request.clientMiddleName,
-                                },
-                                "ФИО не указано"
-                            )],
-                            ["Дата создания", formatDate(request.createdAt)],
-                            ["Желаемое время визита", request.preferredVisitAt ? formatDate(request.preferredVisitAt) : "Не указано"],
-                            ["Адрес", getReadableAddress(request)],
-                            ["Оборудование", getReadableEquipment(request)],
-                            ["Мастер", master ? `${getPersonName(master)}${master.phone ? ` · Телефон: ${master.phone}` : ""}` : "Мастер не назначен"],
-                        ].map(([label, value]) => (
-                            <Grid item xs={12} sm={6} key={label}>
-                                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ display: "block", mb: 0.5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</Typography>
-                                <Typography variant="body1" fontWeight={label === "Клиент" ? 700 : 500} sx={{ overflowWrap: "anywhere", lineHeight: 1.5 }}>{value || "Не указано"}</Typography>
+                        <Box
+                            sx={{
+                                bgcolor: "background.paper",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                borderRadius: 2.5,
+                                p: { xs: 1.75, sm: 2.5 },
+                            }}
+                        >
+                            <Typography
+                                variant="subtitle1"
+                                fontWeight={800}
+                                mb={2}
+                            >
+                                Информация о заявке
+                            </Typography>
+
+                            <Grid container spacing={2.25}>
+                                {[
+                                    [
+                                        "Клиент",
+                                        getPersonName(
+                                            request.client ||
+                                            request.clientInfo || {
+                                                lastName: request.clientLastName,
+                                                firstName: request.clientFirstName,
+                                                middleName: request.clientMiddleName,
+                                            },
+                                            "ФИО не указано"
+                                        ),
+                                    ],
+                                    ["Дата создания", formatDate(request.createdAt)],
+                                    [
+                                        "Желаемое время визита",
+                                        request.preferredVisitAt
+                                            ? formatDate(request.preferredVisitAt)
+                                            : "Не указано",
+                                    ],
+                                    ["Адрес", getReadableAddress(request)],
+                                    ["Оборудование", getReadableEquipment(request)],
+                                    [
+                                        "Мастер",
+                                        master
+                                            ? `${getPersonName(master)}${master.phone ? ` · Телефон: ${master.phone}` : ""}`
+                                            : "Мастер не назначен",
+                                    ],
+                                ].map(([label, value]) => (
+                                    <Grid item xs={12} sm={6} key={label}>
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            fontWeight={700}
+                                            sx={{
+                                                display: "block",
+                                                mb: 0.5,
+                                                textTransform: "uppercase",
+                                                letterSpacing: "0.04em",
+                                            }}
+                                        >
+                                            {label}
+                                        </Typography>
+
+                                        <Typography
+                                            variant="body1"
+                                            fontWeight={label === "Клиент" ? 700 : 500}
+                                            sx={{
+                                                overflowWrap: "anywhere",
+                                                lineHeight: 1.5,
+                                            }}
+                                        >
+                                            {value || "Не указано"}
+                                        </Typography>
+                                    </Grid>
+                                ))}
                             </Grid>
-                        ))}
-                    </Grid>
-                </Box>
+                        </Box>
 
-                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.75, sm: 2.5 } }}>
-                    <Typography variant="subtitle1" fontWeight={800} mb={1}>Описание проблемы</Typography>
-                    <Typography color={request.problemDescription ? "text.primary" : "text.secondary"} sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", lineHeight: 1.7 }}>
-                        {request.problemDescription || "Описание отсутствует"}
-                    </Typography>
-                </Box>
+                        <Box
+                            sx={{
+                                bgcolor: "background.paper",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                borderRadius: 2.5,
+                                p: { xs: 1.75, sm: 2.5 },
+                            }}
+                        >
+                            <Typography
+                                variant="subtitle1"
+                                fontWeight={800}
+                                mb={1}
+                            >
+                                Описание проблемы
+                            </Typography>
 
-                <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: { xs: 1.5, sm: 2.5 } }}>
-                    <Typography variant="subtitle1" fontWeight={800} mb={2}>Этапы заявки</Typography>
-                    <RequestWorkflow status={request.status} />
-                </Box>
+                            <Typography
+                                color={
+                                    request.problemDescription
+                                        ? "text.primary"
+                                        : "text.secondary"
+                                }
+                                sx={{
+                                    whiteSpace: "pre-wrap",
+                                    overflowWrap: "anywhere",
+                                    lineHeight: 1.7,
+                                }}
+                            >
+                                {request.problemDescription || "Описание отсутствует"}
+                            </Typography>
+                        </Box>
 
-                {!ASSIGNABLE_STATUSES.includes(request.status) && canManage && (
-                    <Alert severity="info" sx={{ borderRadius: 2 }}>
-                        Назначение и переназначение мастера доступны только до принятия заявки мастером.
-                    </Alert>
+                        <Box
+                            sx={{
+                                bgcolor: "background.paper",
+                                border: "1px solid",
+                                borderColor: "divider",
+                                borderRadius: 2.5,
+                                p: { xs: 1.5, sm: 2.5 },
+                            }}
+                        >
+                            <Typography
+                                variant="subtitle1"
+                                fontWeight={800}
+                                mb={2}
+                            >
+                                Этапы заявки
+                            </Typography>
+
+                            <RequestWorkflow status={request.status} />
+                        </Box>
+
+                        {[
+                            "REPORT_SUBMITTED",
+                            "REVISION_REQUIRED",
+                            "COMPLETED",
+                        ].includes(request.status) && (
+                            <WorkReportViewer
+                                requestId={request.id}
+                                requestStatus={request.status}
+                            />
+                        )}
+
+                        {!ASSIGNABLE_STATUSES.includes(request.status) &&
+                            canManage && (
+                                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                                    Назначение и переназначение мастера доступны только до принятия заявки мастером.
+                                </Alert>
+                            )}
+                    </Stack>
                 )}
-            </Stack>
-)}
-        </DialogContent>
+            </DialogContent>
 
-        {!loading && !error && (
-            <DialogActions
-                sx={{
-                    p: 2,
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: 1,
-                }}
-            >
-                <Stack
-                    direction={{
-                        xs: "column",
-                        sm: "row",
+            {!loading && !error && (
+                <DialogActions
+                    sx={{
+                        p: 2,
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 1,
                     }}
-                    spacing={1}
                 >
-                    {canAssign && (
-                        <Button
-                            variant="contained"
-                            startIcon={
-                                request.status === "ASSIGNED"
-                                    ? <SwapHorizIcon />
-                                    : <EngineeringOutlinedIcon />
-                            }
-                            onClick={onAssign}
-                            disabled={busy}
-                            sx={{
-                                borderRadius: 2,
-                                textTransform: "none",
-                                fontWeight: 700,
-                                boxShadow: "none",
-                            }}
-                        >
-                            {request.status === "WAITING_FOR_ASSIGNMENT"
-                                ? "Назначить мастера"
-                                : "Переназначить мастера"}
-                        </Button>
-                    )}
+                    <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                    >
+                        {canAssign && (
+                            <Button
+                                variant="contained"
+                                startIcon={
+                                    request.status === "ASSIGNED"
+                                        ? <SwapHorizIcon />
+                                        : <EngineeringOutlinedIcon />
+                                }
+                                onClick={onAssign}
+                                disabled={busy}
+                                sx={{
+                                    borderRadius: 2,
+                                    textTransform: "none",
+                                    fontWeight: 700,
+                                    boxShadow: "none",
+                                }}
+                            >
+                                {request.status === "ASSIGNED"
+                                    ? "Переназначить мастера"
+                                    : "Назначить мастера"}
+                            </Button>
+                        )}
 
-                    {canCancel && (
-                        <Button
-                            color="error"
-                            variant="outlined"
-                            startIcon={<CancelOutlinedIcon />}
-                            onClick={onCancelRequest}
-                            disabled={busy}
-                            sx={{
-                                borderRadius: 2,
-                                textTransform: "none",
-                                fontWeight: 600,
-                            }}
-                        >
-                            Отменить заявку
-                        </Button>
-                    )}
-                </Stack>
+                        {canCancel && (
+                            <Button
+                                variant="outlined"
+                                color="error"
+                                startIcon={<CancelOutlinedIcon />}
+                                onClick={onCancelRequest}
+                                disabled={busy}
+                                sx={{
+                                    borderRadius: 2,
+                                    textTransform: "none",
+                                    fontWeight: 700,
+                                }}
+                            >
+                                Отменить заявку
+                            </Button>
+                        )}
+                    </Stack>
 
-                <Button
-                    onClick={onClose}
-            disabled={busy}
-            sx={{ textTransform: "none" }}
-        >
-            Закрыть
-        </Button>
-    </DialogActions>
-)}
-    </Dialog>
-);
+                    <Button
+                        onClick={onClose}
+                        disabled={busy}
+                        sx={{ textTransform: "none" }}
+                    >
+                        Закрыть
+                    </Button>
+                </DialogActions>
+            )}
+        </Dialog>
+    );
 }
 
 /**
- * Диалог выбора мастера.
+ * Диалог назначения или переназначения мастера.
  */
 function MasterAssignmentDialog({
     open,
@@ -622,15 +707,6 @@ function MasterAssignmentDialog({
         return null;
     }
 
-    const isReassignment =
-        request.status === "ASSIGNED";
-
-    const selectedMaster = candidates.find(
-        (candidate) =>
-            String(getMasterId(candidate)) ===
-            String(selectedMasterId)
-    );
-
     const currentMaster =
         request.master ||
         (request.masterName
@@ -639,14 +715,16 @@ function MasterAssignmentDialog({
                 ? { masterId: request.masterId }
                 : null);
 
-    const selectedName = selectedMaster
-        ? getPersonName(selectedMaster)
-        : "";
+    const currentMasterId = getMasterId(currentMaster);
+    const isReassignment = Boolean(currentMasterId);
 
-    const currentName = getPersonName(
-        currentMaster,
-        "Мастер не назначен"
+    const selectedMaster = candidates.find(
+        (master) =>
+            String(getMasterId(master)) === String(selectedMasterId)
     );
+
+    const currentName = getPersonName(currentMaster, "Не назначен");
+    const selectedName = getPersonName(selectedMaster, "Не выбран");
 
     return (
         <Dialog
@@ -655,427 +733,260 @@ function MasterAssignmentDialog({
             maxWidth="sm"
             fullWidth
         >
-            <DialogTitle>
-                <Stack
-                    direction="row"
-                    spacing={1.25}
-                    alignItems="center"
-                >
-                    <Box
-                        sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            width: 42,
-                            height: 42,
-                            flexShrink: 0,
-                            borderRadius: 2,
-                            color: "primary.main",
-                            backgroundColor: "primary.50",
-                        }}
-                    >
-                        {isReassignment
-                            ? <SwapHorizIcon />
-                            : <EngineeringOutlinedIcon />}
-                    </Box>
+            <DialogTitle fontWeight={800}>
+                {isReassignment ? "Переназначение мастера" : "Назначение мастера"}
+            </DialogTitle>
 
-                    <Box>
-                        <Typography
-                            variant="h6"
-                            fontWeight={800}
-                        >
-                            {isReassignment
-                                ? "Переназначение мастера"
-                                : "Назначение мастера"}
-                        </Typography>
+            <DialogContent dividers>
+                <Stack spacing={2}>
+                    <Alert severity="info">
+                        Заявка №{" "}
+                        {String(
+                            request.requestNumber ??
+                            request.number ??
+                            request.id
+                        )}
+                    </Alert>
 
-                        <Typography
-                            variant="body2"
-                            color="text.secondary"
-                        >
-            Заявка №{" "}
-            {String(
-                request.requestNumber ??
-                request.number ??
-                request.id
-            )}
-        </Typography>
-    </Box>
-</Stack>
-</DialogTitle>
+                    {currentMaster && (
+                        <Box>
+                            <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                mb={0.5}
+                            >
+                                Текущий мастер
+                            </Typography>
 
-<DialogContent dividers>
-    <Stack spacing={2}>
-        {isReassignment && (
-            <Alert
-                severity="info"
-                icon={<SwapHorizIcon />}
-            >
-                Текущий мастер:{" "}
-                <strong>{currentName}</strong>
-                {currentMaster?.phone
-                    ? ` · ${currentMaster.phone}`
-                    : ""}
-                . Выберите нового мастера ниже.
-            </Alert>
-        )}
+                            <MasterName master={currentMaster} />
+                        </Box>
+                    )}
 
-        <Typography
-            color="text.secondary"
-            variant="body2"
-        >
-            Выберите мастера из списка подходящих по
-            специализации. Количество активных заявок
-            показывает текущую нагрузку и не ограничивает
-            назначение.
-        </Typography>
-
-        {error && (
-            <Alert
-                severity="error"
-                action={
-                    <Button
-                        color="inherit"
-                        size="small"
-                        onClick={onRetry}
-                        disabled={loading || saving}
-                        sx={{ textTransform: "none" }}
-                    >
-                        Повторить
-                    </Button>
-                }
-            >
-                {error}
-            </Alert>
-        )}
-
-        {loading ? (
-            <Box
-                sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    py: 5,
-                }}
-            >
-                <Stack
-                    alignItems="center"
-                    spacing={1.5}
-                >
-                    <CircularProgress size={30} />
-
-                    <Typography
-                        color="text.secondary"
-                        variant="body2"
-                    >
-                        Загружаем подходящих мастеров...
+                    <Typography fontWeight={700}>
+                        Доступные мастера
                     </Typography>
-                </Stack>
-    </Box>
-) : error ? null : candidates.length === 0 ? (
-    <Box
-        sx={{
-            textAlign: "center",
-            py: 4,
-        }}
-    >
-        <EngineeringOutlinedIcon
-            sx={{
-                fontSize: 42,
-                color: "text.disabled",
-                mb: 1,
-            }}
-        />
 
-        <Typography fontWeight={700}>
-            Подходящие мастера не найдены
-        </Typography>
-
-        <Typography
-            color="text.secondary"
-            variant="body2"
-            sx={{ mt: 0.5 }}
-        >
-            Проверьте специализации мастеров и
-            попробуйте обновить список.
-        </Typography>
-
-        <Button
-            onClick={onRetry}
-            sx={{
-                mt: 1.5,
-                textTransform: "none",
-            }}
-        >
-            Повторить поиск
-        </Button>
-    </Box>
-) : (
-    <Stack
-        spacing={1.25}
-        sx={{
-            maxHeight: 360,
-            overflowY: "auto",
-            pr: 0.5,
-        }}
-    >
-        {candidates.map((master) => {
-            const id = getMasterId(master);
-
-            if (id == null) {
-                return null;
-            }
-
-            const checked =
-                String(selectedMasterId) === String(id);
-
-            const name = getPersonName(
-                master,
-                "Мастер без ФИО"
-            );
-
-            const isCurrent =
-                currentMaster &&
-                String(
-                    getMasterId(currentMaster) ??
-                    currentMaster.masterId
-                ) === String(id);
-
-            return (
-                <Card
-                    key={String(id)}
-                    variant="outlined"
-                    onClick={() => onSelectMaster(String(id))}
-                    sx={{
-                        borderRadius: 2.5,
-                        cursor: saving
-                            ? "default"
-                            : "pointer",
-                        borderColor: checked
-                            ? "primary.main"
-                            : "divider",
-                        backgroundColor: checked
-                            ? "primary.50"
-                            : "background.paper",
-                        boxShadow: checked ? 1 : 0,
-                        transition: "all .15s ease",
-                        "&:hover": saving
-                            ? {}
-                            : {
-                                borderColor: "primary.main",
-                                backgroundColor: "action.hover",
-                            },
-                    }}
-                >
-                    <CardContent
-                        sx={{
-                            p: 2,
-                            "&:last-child": {
-                                pb: 2,
-                            },
-                        }}
-                    >
-                        <Stack
-                            direction="row"
-                            spacing={1.5}
-                            alignItems="center"
-                        >
-                            <Radio
-                                checked={checked}
-                                onChange={() =>
-                                    onSelectMaster(String(id))
-                                }
-                                disabled={saving}
-                                inputProps={{
-                                    "aria-label": name,
-                                }}
-                            />
-
-                            <Box
-                                sx={{
-                                    width: 42,
-                                    height: 42,
-                                    borderRadius: "50%",
-                                    flexShrink: 0,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    color: "primary.main",
-                                    backgroundColor: checked
-                                        ? "primary.100"
-                                        : "action.hover",
-                                }}
-                            >
-                                <PersonOutlineOutlinedIcon />
-                            </Box>
-
-                            <Box
-                                sx={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                }}
-                            >
-                                <Stack
-                                    direction={{
-                                        xs: "column",
-                                        sm: "row",
-                                    }}
-                                    alignItems={{
-                                        xs: "flex-start",
-                                        sm: "center",
-                                    }}
-                                    spacing={0.75}
-                                    flexWrap="wrap"
+                    {loading ? (
+                        <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : error ? (
+                        <Alert
+                            severity="error"
+                            action={
+                                <Button
+                                    color="inherit"
+                                    size="small"
+                                    onClick={onRetry}
                                 >
-                                    <Typography
-                                        fontWeight={700}
+                                    Повторить
+                                </Button>
+                            }
+                        >
+                            {error}
+                        </Alert>
+                    ) : candidates.length === 0 ? (
+                        <Alert severity="warning">
+                            Подходящие мастера не найдены. Проверьте специализацию и доступность мастеров.
+                        </Alert>
+                    ) : (
+                        <Stack spacing={1}>
+                            {candidates.map((master) => {
+                                const id = getMasterId(master);
+                                const checked =
+                                    String(id) === String(selectedMasterId);
+                                const isCurrent =
+                                    String(id) === String(currentMasterId);
+                                const name = getPersonName(master);
+
+                                return (
+                                    <Card
+                                        key={id}
+                                        variant="outlined"
                                         sx={{
-                                            overflowWrap: "anywhere",
+                                            borderRadius: 2,
+                                            borderColor: checked
+                                                ? "primary.main"
+                                                : "divider",
+                                            bgcolor: checked
+                                                ? "action.selected"
+                                                : "background.paper",
                                         }}
                                     >
-                                        {name}
-                                    </Typography>
+                                        <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+                                            <Stack
+                                                direction="row"
+                                                spacing={1.5}
+                                                alignItems="center"
+                                            >
+                                                <Radio
+                                                    checked={checked}
+                                                    onChange={() => onSelectMaster(String(id))}
+                                                    value={String(id)}
+                                                    disabled={saving || isCurrent}
+                                                />
 
-                                    {isCurrent && (
-                                        <Chip
-                                            label="Текущий мастер"
-                                            size="small"
-                                            color="default"
-                                            variant="outlined"
-                                        />
-                                    )}
+                                                <Box
+                                                    sx={{
+                                                        width: 40,
+                                                        height: 40,
+                                                        borderRadius: 2,
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        color: "primary.main",
+                                                        backgroundColor: checked
+                                                            ? "primary.100"
+                                                            : "action.hover",
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    <PersonOutlineOutlinedIcon />
+                                                </Box>
 
-                                    {checked && (
-                                        <Chip
-                                            label="Выбран"
-                                            size="small"
-                                            color="primary"
-                                        />
-                                    )}
-                                </Stack>
+                                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                                    <Stack
+                                                        direction={{ xs: "column", sm: "row" }}
+                                                        alignItems={{ xs: "flex-start", sm: "center" }}
+                                                        spacing={0.75}
+                                                        flexWrap="wrap"
+                                                    >
+                                                        <Typography
+                                                            fontWeight={700}
+                                                            sx={{ overflowWrap: "anywhere" }}
+                                                        >
+                                                            {name}
+                                                        </Typography>
 
-                                <Stack
-                                    direction={{
-                                        xs: "column",
-                                        sm: "row",
-                                    }}
-                                    spacing={{
-                                        xs: 0.5,
-                                        sm: 2,
-                                    }}
-                                    sx={{ mt: 0.75 }}
-                                >
-                                    <Stack
-                                        direction="row"
-                                        spacing={0.75}
-                                        alignItems="center"
-                                    >
-                                        <PhoneOutlinedIcon
-                                            sx={{
-                                                fontSize: 16,
-                                                color: "text.secondary",
-                                            }}
-                                        />
+                                                        {isCurrent && (
+                                                            <Chip
+                                                                label="Текущий мастер"
+                                                                size="small"
+                                                                variant="outlined"
+                                                            />
+                                                        )}
 
-                                        <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                        >
-                                            {master.phone ||
-                                                "Телефон не указан"}
-                                        </Typography>
-                                    </Stack>
+                                                        {checked && (
+                                                            <Chip
+                                                                label="Выбран"
+                                                                size="small"
+                                                                color="primary"
+                                                            />
+                                                        )}
+                                                    </Stack>
 
-                                    <Stack
-                                        direction="row"
-                                        spacing={0.75}
-                                        alignItems="center"
-                                    >
-                                        <WorkOutlineOutlinedIcon
-                                            sx={{
-                                                fontSize: 16,
-                                                color: "text.secondary",
-                                            }}
-                                        />
+                                                    <Stack
+                                                        direction={{ xs: "column", sm: "row" }}
+                                                        spacing={{ xs: 0.5, sm: 2 }}
+                                                        sx={{ mt: 0.75 }}
+                                                    >
+                                                        <Stack
+                                                            direction="row"
+                                                            spacing={0.75}
+                                                            alignItems="center"
+                                                        >
+                                                            <PhoneOutlinedIcon
+                                                                sx={{
+                                                                    fontSize: 16,
+                                                                    color: "text.secondary",
+                                                                }}
+                                                            />
 
-                                        <Typography
-                                            variant="body2"
-                                            color="text.secondary"
-                                        >
-                                            Активных заявок:{" "}
-                                            {master.activeRequestsCount ?? 0}
-                                        </Typography>
-                                    </Stack>
-                                </Stack>
-                            </Box>
-        </Stack>
-    </CardContent>
-</Card>
-);
-})}
-</Stack>
-)}
+                                                            <Typography
+                                                                variant="body2"
+                                                                color="text.secondary"
+                                                            >
+                                                                {master.phone || "Телефон не указан"}
+                                                            </Typography>
+                                                        </Stack>
 
-        {!loading && !error && selectedMaster && (
-            <Alert
-                severity="info"
-                icon={<CheckCircleOutlineIcon />}
-            >
-                {isReassignment
-                    ? `Переназначить заявку с мастера «${currentName}» на «${selectedName}»?`
-                    : `Назначить мастера «${selectedName}» на заявку №${String(
-                        request.requestNumber ??
-                        request.number ??
-                        request.id
-                    )}?`}
-            </Alert>
-        )}
-    </Stack>
-</DialogContent>
+                                                        <Stack
+                                                            direction="row"
+                                                            spacing={0.75}
+                                                            alignItems="center"
+                                                        >
+                                                            <WorkOutlineOutlinedIcon
+                                                                sx={{
+                                                                    fontSize: 16,
+                                                                    color: "text.secondary",
+                                                                }}
+                                                            />
 
-<DialogActions
-    sx={{
-        p: 2,
-        gap: 1,
-    }}
->
-    <Button
-        onClick={onClose}
-        disabled={saving}
-        sx={{ textTransform: "none" }}
-    >
-        Отмена
-    </Button>
+                                                            <Typography
+                                                                variant="body2"
+                                                                color="text.secondary"
+                                                            >
+                                                                Активных заявок:{" "}
+                                                                {master.activeRequestsCount ?? 0}
+                                                            </Typography>
+                                                        </Stack>
+                                                    </Stack>
+                                                </Box>
+                                            </Stack>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </Stack>
+                    )}
 
-    <Button
-        variant="contained"
-        onClick={onConfirm}
-        disabled={
-            loading ||
-            saving ||
-            Boolean(error) ||
-            !selectedMaster
-        }
-        startIcon={
-            saving
-                ? <CircularProgress size={18} color="inherit" />
-                : <CheckCircleOutlineIcon />
-        }
-        sx={{
-            borderRadius: 2,
-            textTransform: "none",
-            fontWeight: 700,
-            boxShadow: "none",
-        }}
-    >
-        {saving
-            ? "Сохранение..."
-            : isReassignment
-                ? "Подтвердить переназначение"
-                : "Подтвердить назначение"}
-    </Button>
-</DialogActions>
-</Dialog>
-);
+                    {!loading && !error && selectedMaster && (
+                        <Alert
+                            severity="info"
+                            icon={<CheckCircleOutlineIcon />}
+                        >
+                            {isReassignment
+                                ? `Переназначить заявку с мастера «${currentName}» на «${selectedName}»?`
+                                : `Назначить мастера «${selectedName}» на заявку №${String(
+                                    request.requestNumber ??
+                                    request.number ??
+                                    request.id
+                                )}?`}
+                        </Alert>
+                    )}
+                </Stack>
+            </DialogContent>
+
+            <DialogActions sx={{ p: 2, gap: 1 }}>
+                <Button
+                    onClick={onClose}
+                    disabled={saving}
+                    sx={{ textTransform: "none" }}
+                >
+                    Отмена
+                </Button>
+
+                <Button
+                    variant="contained"
+                    onClick={onConfirm}
+                    disabled={
+                        loading ||
+                        saving ||
+                        Boolean(error) ||
+                        !selectedMaster ||
+                        String(getMasterId(selectedMaster)) === String(currentMasterId)
+                    }
+                    startIcon={
+                        saving
+                            ? <CircularProgress size={18} color="inherit" />
+                            : <CheckCircleOutlineIcon />
+                    }
+                    sx={{
+                        borderRadius: 2,
+                        textTransform: "none",
+                        fontWeight: 700,
+                        boxShadow: "none",
+                    }}
+                >
+                    {saving
+                        ? "Сохранение..."
+                        : isReassignment
+                            ? "Подтвердить переназначение"
+                            : "Подтвердить назначение"}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
 }
 
 /**
@@ -1117,9 +1028,6 @@ export default function RequestManagementPage() {
         user?.role === "ADMIN" ||
         user?.role === "DISPATCHER";
 
-    /**
-     * Загрузка заявок.
-     */
     const loadRequests = useCallback(
         async (isRefresh = false) => {
             setError("");
@@ -1134,16 +1042,12 @@ export default function RequestManagementPage() {
                 const data = await getAllRequests();
 
                 if (!Array.isArray(data)) {
-                    throw new Error(
-                        "Не удалось получить список заявок."
-                    );
+                    throw new Error("Не удалось получить список заявок.");
                 }
 
                 setRequests(data);
             } catch (requestError) {
-                setError(
-                    getAssignmentErrorMessage(requestError)
-                );
+                setError(getAssignmentErrorMessage(requestError));
             } finally {
                 setLoading(false);
                 setRefreshing(false);
@@ -1152,25 +1056,18 @@ export default function RequestManagementPage() {
         []
     );
 
-    /**
-     * Получение текущего пользователя.
-     */
     const loadProfile = useCallback(async () => {
         setProfileLoading(true);
 
         try {
             const profile = await getCurrentProfile();
-
             setUser(profile);
-
             return profile;
         } catch {
             setUser(null);
-
             setError(
                 "Не удалось определить пользователя. Войдите в систему повторно."
             );
-
             return null;
         } finally {
             setProfileLoading(false);
@@ -1187,10 +1084,7 @@ export default function RequestManagementPage() {
                 return;
             }
 
-            if (
-                !profile ||
-                !["ADMIN", "DISPATCHER"].includes(profile.role)
-            ) {
+            if (!profile || !["ADMIN", "DISPATCHER"].includes(profile.role)) {
                 setLoading(false);
                 return;
             }
@@ -1205,19 +1099,12 @@ export default function RequestManagementPage() {
         };
     }, [loadProfile, loadRequests]);
 
-    /**
-     * Поиск и сортировка заявок.
-     */
     const filteredRequests = useMemo(() => {
-        const normalizedSearch =
-            search.trim().toLowerCase();
+        const normalizedSearch = search.trim().toLowerCase();
 
         return [...requests]
             .filter((request) => {
-                if (
-                    filter !== "ALL" &&
-                    request.status !== filter
-                ) {
+                if (filter !== "ALL" && request.status !== filter) {
                     return false;
                 }
 
@@ -1225,10 +1112,7 @@ export default function RequestManagementPage() {
                     return true;
                 }
 
-                const id = String(
-                    request.id ?? ""
-                ).toLowerCase();
-
+                const id = String(request.id ?? "").toLowerCase();
                 return id.includes(normalizedSearch);
             })
             .sort((a, b) => {
@@ -1257,36 +1141,24 @@ export default function RequestManagementPage() {
             });
     }, [requests, search, filter]);
 
-    /**
-     * Счётчики заявок.
-     */
     const stats = useMemo(
         () => ({
             total: requests.length,
-
             waiting: requests.filter(
-                (request) =>
-                    request.status === "WAITING_FOR_ASSIGNMENT"
+                (request) => request.status === "WAITING_FOR_ASSIGNMENT"
             ).length,
-
             assigned: requests.filter(
-                (request) =>
-                    request.status === "ASSIGNED"
+                (request) => request.status === "ASSIGNED"
             ).length,
         }),
         [requests]
     );
 
-    /**
-     * Открытие карточки заявки.
-     */
     const openRequest = async (request) => {
         setSelectedRequest(request);
-
         setDetails(null);
         setDetailsError("");
         setDetailsLoading(true);
-
         setSuccess("");
         setError("");
 
@@ -1294,33 +1166,23 @@ export default function RequestManagementPage() {
             const data = await getRequestById(request.id);
 
             if (!data || typeof data !== "object") {
-                throw new Error(
-                    "Не удалось получить подробности заявки."
-                );
+                throw new Error("Не удалось получить подробности заявки.");
             }
 
             setDetails(data);
 
             setSelectedRequest((previous) =>
                 previous?.id === request.id
-                    ? {
-                        ...previous,
-                        ...data,
-                    }
+                    ? { ...previous, ...data }
                     : previous
             );
         } catch (requestError) {
-            setDetailsError(
-                getAssignmentErrorMessage(requestError)
-            );
+            setDetailsError(getAssignmentErrorMessage(requestError));
         } finally {
             setDetailsLoading(false);
         }
     };
 
-    /**
-     * Закрытие карточки заявки.
-     */
     const closeRequestDetails = () => {
         if (assignmentSaving || cancelling) {
             return;
@@ -1332,9 +1194,6 @@ export default function RequestManagementPage() {
         setAssignmentOpen(false);
     };
 
-    /**
-     * Получение списка мастеров-кандидатов.
-     */
     const loadCandidates = async (requestId) => {
         if (!requestId) {
             return;
@@ -1346,29 +1205,20 @@ export default function RequestManagementPage() {
         setCandidatesLoading(true);
 
         try {
-            const data = await getAssignmentCandidates(
-                requestId
-            );
+            const data = await getAssignmentCandidates(requestId);
 
             if (!Array.isArray(data)) {
-                throw new Error(
-                    "Сервер вернул некорректный список мастеров."
-                );
+                throw new Error("Сервер вернул некорректный список мастеров.");
             }
 
             setCandidates(data);
         } catch (requestError) {
-            setCandidatesError(
-                getAssignmentErrorMessage(requestError)
-            );
+            setCandidatesError(getAssignmentErrorMessage(requestError));
         } finally {
             setCandidatesLoading(false);
         }
     };
 
-    /**
-     * Открытие интерфейса назначения.
-     */
     const openAssignmentDialog = async () => {
         const request = details;
 
@@ -1382,48 +1232,33 @@ export default function RequestManagementPage() {
 
         setAssignmentOpen(true);
         setSuccess("");
-
         await loadCandidates(request.id);
     };
 
-    /**
-     * Повторная загрузка кандидатов.
-     */
     const retryLoadCandidates = () => {
         if (details?.id) {
             loadCandidates(details.id);
         }
     };
 
-    /**
-     * Назначение или переназначение мастера.
-     */
     const handleAssignMaster = async () => {
-        if (
-            !details ||
-            !selectedMasterId ||
-            !isManager
-        ) {
+        if (!details || !selectedMasterId || !isManager) {
             return;
         }
 
         const selectedMaster = candidates.find(
             (candidate) =>
-                String(getMasterId(candidate)) ===
-                String(selectedMasterId)
+                String(getMasterId(candidate)) === String(selectedMasterId)
         );
 
         if (!selectedMaster) {
             setCandidatesError(
                 "Выбранный мастер больше не доступен. Обновите список и выберите его заново."
             );
-
             return;
         }
 
-        const selectedName = getPersonName(
-            selectedMaster
-        );
+        const selectedName = getPersonName(selectedMaster);
 
         const currentMaster =
             details.master ||
@@ -1445,10 +1280,6 @@ export default function RequestManagementPage() {
                     details.id
                 )}?`;
 
-        /**
-         * Запрос назначения отправляется
-         * только после подтверждения.
-         */
         if (!window.confirm(confirmationText)) {
             return;
         }
@@ -1459,14 +1290,7 @@ export default function RequestManagementPage() {
         setSuccess("");
 
         try {
-            /**
-             * UUID передаётся строкой.
-             * Не преобразовывать masterId в Number.
-             */
-            await assignMaster(
-                details.id,
-                selectedMasterId
-            );
+            await assignMaster(details.id, selectedMasterId);
 
             setAssignmentOpen(false);
             setCandidates([]);
@@ -1482,40 +1306,23 @@ export default function RequestManagementPage() {
                     )}.`
             );
 
-            /**
-             * Обновление карточки заявки
-             * после успешного назначения.
-             */
-            const refreshedDetails =
-                await getRequestById(details.id);
-
+            const refreshedDetails = await getRequestById(details.id);
             setDetails(refreshedDetails);
 
             setSelectedRequest((previous) =>
                 previous?.id === details.id
-                    ? {
-                        ...previous,
-                        ...refreshedDetails,
-                    }
+                    ? { ...previous, ...refreshedDetails }
                     : previous
             );
 
-            /**
-             * Обновление списка заявок.
-             */
             await loadRequests(true);
         } catch (requestError) {
-            setCandidatesError(
-                getAssignmentErrorMessage(requestError)
-            );
+            setCandidatesError(getAssignmentErrorMessage(requestError));
         } finally {
             setAssignmentSaving(false);
         }
     };
 
-    /**
-     * Открытие подтверждения отмены.
-     */
     const openCancelConfirmation = () => {
         if (
             !details ||
@@ -1528,9 +1335,6 @@ export default function RequestManagementPage() {
         setCancelTarget(details);
     };
 
-    /**
-     * Отмена заявки администратором или диспетчером.
-     */
     const handleCancelRequest = async () => {
         if (!cancelTarget || !isManager) {
             return;
@@ -1542,7 +1346,6 @@ export default function RequestManagementPage() {
 
         try {
             await adminCancelRequest(cancelTarget.id);
-
             setCancelTarget(null);
 
             setSuccess(
@@ -1553,33 +1356,23 @@ export default function RequestManagementPage() {
                 )} отменена.`
             );
 
-            const refreshedDetails =
-                await getRequestById(cancelTarget.id);
-
+            const refreshedDetails = await getRequestById(cancelTarget.id);
             setDetails(refreshedDetails);
 
             setSelectedRequest((previous) =>
                 previous?.id === cancelTarget.id
-                    ? {
-                        ...previous,
-                        ...refreshedDetails,
-                    }
+                    ? { ...previous, ...refreshedDetails }
                     : previous
             );
 
             await loadRequests(true);
         } catch (requestError) {
-            setError(
-                getAssignmentErrorMessage(requestError)
-            );
+            setError(getAssignmentErrorMessage(requestError));
         } finally {
             setCancelling(false);
         }
     };
 
-    /**
-     * Закрытие диалога назначения.
-     */
     const closeAssignmentDialog = () => {
         if (assignmentSaving) {
             return;
@@ -1589,86 +1382,47 @@ export default function RequestManagementPage() {
         setCandidatesError("");
     };
 
-    /**
-     * Загрузка пользователя.
-     */
-    if (
-        profileLoading ||
-        (loading && !user && !error)
-    ) {
+    if (profileLoading || (loading && !user && !error)) {
         return (
             <MainLayout user={user}>
-                <Box
-                    sx={{
-                        display: "flex",
-                        justifyContent: "center",
-                        py: 10,
-                    }}
-                >
+                <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
                     <CircularProgress />
                 </Box>
             </MainLayout>
         );
     }
 
-    /**
-     * Защита от доступа клиента или мастера.
-     */
-    if (!user || !isManager) {
+    if (!isManager) {
         return (
             <MainLayout user={user}>
-                <Box
-                    sx={{
-                        maxWidth: 720,
-                        mx: "auto",
-                        mt: 4,
-                    }}
-                >
-                    <Alert severity="error">
-                        {error ||
-                            "У вас нет доступа к управлению заявками. Эта страница доступна только диспетчеру и администратору."}
-                    </Alert>
-                </Box>
+                <Alert severity="error">
+                    Эта страница доступна только администратору и диспетчеру.
+                </Alert>
             </MainLayout>
         );
     }
 
     return (
         <MainLayout user={user}>
-            <Box sx={{ maxWidth: 1440, mx: "auto" }}>
-                {/* Заголовок страницы */}
+            <Box sx={{ maxWidth: 1400, mx: "auto", p: { xs: 1.5, md: 3 } }}>
                 <Box
                     sx={{
                         display: "flex",
                         justifyContent: "space-between",
-                        alignItems: {
-                            xs: "flex-start",
-                            sm: "center",
-                        },
-                        flexDirection: {
-                            xs: "column",
-                            sm: "row",
-                        },
+                        alignItems: { xs: "flex-start", sm: "center" },
+                        flexDirection: { xs: "column", sm: "row" },
                         gap: 2,
                         mb: 3,
                         width: "100%",
                     }}
                 >
                     <Box sx={{ minWidth: 0 }}>
-                        <Typography
-                            variant="h4"
-                            fontWeight={800}
-                            color="primary"
-                        >
+                        <Typography variant="h4" fontWeight={800} color="primary">
                             Управление заявками
                         </Typography>
 
-                        <Typography
-                            color="text.secondary"
-                            sx={{ mt: 0.5 }}
-                        >
-                            Назначение и переназначение мастеров,
-                            а также контроль заявок.
+                        <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                            Назначение и переназначение мастеров, а также контроль заявок.
                         </Typography>
                     </Box>
 
@@ -1694,9 +1448,7 @@ export default function RequestManagementPage() {
                             backgroundColor: "#FFFFFF",
                             whiteSpace: "nowrap",
                             boxShadow: "none",
-                            "& .MuiButton-startIcon": {
-                                marginRight: 0.7,
-                            },
+                            "& .MuiButton-startIcon": { marginRight: 0.7 },
                             "&:hover": {
                                 borderColor: "#93C5FD",
                                 backgroundColor: "#EFF6FF",
@@ -1704,13 +1456,10 @@ export default function RequestManagementPage() {
                             },
                         }}
                     >
-                        {refreshing
-                            ? "Обновление..."
-                            : "Обновить"}
+                        {refreshing ? "Обновление..." : "Обновить"}
                     </Button>
                 </Box>
 
-                {/* Уведомления */}
                 {error && (
                     <Alert
                         severity="error"
@@ -1731,12 +1480,7 @@ export default function RequestManagementPage() {
                     </Alert>
                 )}
 
-                {/* Статистика */}
-                <Grid
-                    container
-                    spacing={2}
-                    sx={{ mb: 3 }}
-                >
+                <Grid container spacing={2} sx={{ mb: 3 }}>
                     {[
                         {
                             label: "Всего заявок",
@@ -1754,31 +1498,17 @@ export default function RequestManagementPage() {
                             color: "#16A34A",
                         },
                     ].map((item) => (
-                        <Grid
-                            key={item.label}
-                            size={{ xs: 12, sm: 4 }}
-                        >
-                            <Card
-                                sx={{
-                                    borderRadius: 3,
-                                    height: "100%",
-                                }}
-                            >
+                        <Grid key={item.label} size={{ xs: 12, sm: 4 }}>
+                            <Card sx={{ borderRadius: 3, height: "100%" }}>
                                 <CardContent>
-                                    <Typography
-                                        color="text.secondary"
-                                        variant="body2"
-                                    >
+                                    <Typography color="text.secondary" variant="body2">
                                         {item.label}
                                     </Typography>
 
                                     <Typography
                                         variant="h3"
                                         fontWeight={800}
-                                        sx={{
-                                            mt: 1,
-                                            color: item.color,
-                                        }}
+                                        sx={{ mt: 1, color: item.color }}
                                     >
                                         {item.value}
                                     </Typography>
@@ -1788,367 +1518,293 @@ export default function RequestManagementPage() {
                     ))}
                 </Grid>
 
-                {/* Поиск и фильтры */}
-                <Card
-                    sx={{
-                        borderRadius: 3,
-                        mb: 3,
-                    }}
-        >
-            <CardContent>
-                <Grid
-                    container
-                    spacing={2}
-                    alignItems="center"
-                >
-                    <Grid size={{ xs: 12, md: 7 }}>
-                        <Typography
-                            variant="h6"
-                            fontWeight={700}
-                        >
-                            Список заявок
-                        </Typography>
-
-                        <Typography
-                            variant="body2"
-                            color="text.secondary"
-                        >
-                            Откройте карточку заявки, чтобы
-                            просмотреть детали и при необходимости
-                            назначить мастера.
-                        </Typography>
-                    </Grid>
-
-                    <Grid size={{ xs: 12, md: 5 }}>
-                        <Stack spacing={1.5}>
-                            <TextField
-                                fullWidth
-                                size="small"
-                                label="Поиск по ID заявки"
-                                value={search}
-                                onChange={(event) =>
-                                    setSearch(event.target.value)
-                                }
-                            />
-
-                            <TextField
-                                select
-                                fullWidth
-                                size="small"
-                                label="Фильтр по статусу"
-                                value={filter}
-                                onChange={(event) =>
-                                    setFilter(event.target.value)
-                                }
-                            >
-                                {FILTERS.map((option) => (
-                                    <MenuItem
-                                        key={option.value}
-                                        value={option.value}
-                                    >
-                                        {option.label}
-                                    </MenuItem>
-                                ))}
-                            </TextField>
-                        </Stack>
-                    </Grid>
-                </Grid>
-            </CardContent>
-        </Card>
-
-        {/* Список заявок */}
-        {loading ? (
-            <Box
-                sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    py: 8,
-                }}
-            >
-                <CircularProgress />
-            </Box>
-        ) : filteredRequests.length === 0 ? (
-            <Card sx={{ borderRadius: 3 }}>
-                <CardContent
-                    sx={{
-                        textAlign: "center",
-                        py: 8,
-                    }}
-                >
-                    <AssignmentOutlinedIcon
-                        sx={{
-                            fontSize: 54,
-                            color: "text.disabled",
-                            mb: 1,
-                        }}
-                    />
-
-                    <Typography
-                        variant="h6"
-                        fontWeight={700}
-                    >
-                        {requests.length === 0
-                            ? "Заявок пока нет"
-                            : "Заявки не найдены"}
-                    </Typography>
-
-                    <Typography
-                        color="text.secondary"
-                        sx={{ mt: 1 }}
-                    >
-                        {requests.length === 0
-                            ? "Когда появятся новые заявки, они отобразятся здесь."
-                            : "Попробуйте изменить поисковый запрос или фильтр."}
-                    </Typography>
-                </CardContent>
-    </Card>
-) : (
-    <Stack spacing={2}>
-        {filteredRequests.map((request) => {
-            const info = statusInfo(request.status);
-
-            return (
-                <Card
-                    key={request.id}
-                    onClick={() => openRequest(request)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                        if (
-                            event.key === "Enter" ||
-                            event.key === " "
-                        ) {
-                            event.preventDefault();
-                            openRequest(request);
-                        }
-                    }}
-                    sx={{
-                        borderRadius: 3,
-                        cursor: "pointer",
-                        transition: "box-shadow .2s, transform .2s",
-                        "&:hover": {
-                            boxShadow: 5,
-                            transform: "translateY(-1px)",
-                        },
-                        "&:focus-visible": {
-                            outline: "2px solid",
-                            outlineColor: "primary.main",
-                            outlineOffset: 2,
-                        },
-                    }}
-                >
-                    <CardContent
-                        sx={{
-                            p: {
-                                xs: 2,
-                                md: 3,
-                            },
-                        }}
-                    >
-                        <Stack
-                            direction={{
-                                xs: "column",
-                                sm: "row",
-                            }}
-                            justifyContent="space-between"
-                            alignItems={{
-                                xs: "flex-start",
-                                sm: "center",
-                            }}
-                            spacing={2}
-                        >
-                            <Stack
-                                spacing={1.25}
-                                sx={{
-                                    minWidth: 0,
-                                    flex: 1,
-                                }}
-                            >
-                                <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    alignItems="center"
-                                    flexWrap="wrap"
-                                >
-                                    <Typography
-                                        fontWeight={800}
-                                        sx={{
-                                            overflowWrap: "anywhere",
-                                        }}
-                                    >
-                                        Заявка №{" "}
-                                        {String(
-                                            request.requestNumber ??
-                                            request.number ??
-                                            request.id
-                                        )}
-                                    </Typography>
-
-                                    <Chip
-                                        label={info.label}
-                                        color={info.color}
-                                        size="small"
-                                    />
-                                </Stack>
-
-                                <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    alignItems="center"
-                                >
-                                    <AccessTimeIcon
-                                        fontSize="small"
-                                        color="action"
-                                    />
-
-                                    <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                    >
-                                        Создана:{" "}
-                                        {formatDate(request.createdAt)}
-                                    </Typography>
-                                </Stack>
-                            </Stack>
-
-
-                        </Stack>
-
-                        <Divider sx={{ my: 2 }} />
-
-                        <Stack
-                            direction={{
-                                xs: "column",
-                                md: "row",
-                            }}
-                            alignItems="stretch"
-                            spacing={2}
-                        >
-                            <Box
-                                sx={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    border: "1px solid",
-                                    borderColor: "divider",
-                                    borderRadius: 2,
-                                    backgroundColor: "background.default",
-                                    p: { xs: 1.25, md: 1.5 },
-                                    overflow: "hidden",
-                                }}
-                            >
-                                <RequestWorkflow status={request.status} compact />
-                            </Box>
-
-                            <Box
-                                sx={{
-                                    minWidth: {
-                                        xs: "auto",
-                                        md: 180,
-                                    },
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    px: {
-                                        xs: 0,
-                                        md: 1,
-                                    },
-                                }}
-                            >
-                                <Typography
-                                    variant="body2"
-                                    color="primary.main"
-                                    fontWeight={600}
-                                    sx={{ textAlign: "center" }}
-                                >
-                                    Открыть карточку
+                <Card sx={{ borderRadius: 3, mb: 3 }}>
+                    <CardContent>
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid size={{ xs: 12, md: 7 }}>
+                                <Typography variant="h6" fontWeight={700}>
+                                    Список заявок
                                 </Typography>
-                            </Box>
-                        </Stack>
+
+                                <Typography variant="body2" color="text.secondary">
+                                    Откройте карточку заявки, чтобы просмотреть детали и при необходимости назначить мастера.
+                                </Typography>
+                            </Grid>
+
+                            <Grid size={{ xs: 12, md: 5 }}>
+                                <Stack spacing={1.5}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Поиск по ID заявки"
+                                        value={search}
+                                        onChange={(event) => setSearch(event.target.value)}
+                                    />
+
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        size="small"
+                                        label="Фильтр по статусу"
+                                        value={filter}
+                                        onChange={(event) => setFilter(event.target.value)}
+                                    >
+                                        {FILTERS.map((option) => (
+                                            <MenuItem
+                                                key={option.value}
+                                                value={option.value}
+                                            >
+                                                {option.label}
+                                            </MenuItem>
+                                        ))}
+                                    </TextField>
+                                </Stack>
+                            </Grid>
+                        </Grid>
                     </CardContent>
                 </Card>
-            );
-        })}
-    </Stack>
-)}
 
-{/* Карточка заявки */}
-<RequestDetailsDialog
-    request={details}
-    loading={detailsLoading}
-    error={detailsError}
-    userRole={user?.role}
-    onClose={closeRequestDetails}
-    onAssign={(action) =>
-        action === "reload"
-            ? openRequest(selectedRequest)
-            : openAssignmentDialog()
-    }
-    onCancelRequest={openCancelConfirmation}
-    busy={assignmentSaving || cancelling}
-/>
+                {loading ? (
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                        <CircularProgress />
+                    </Box>
+                ) : filteredRequests.length === 0 ? (
+                    <Card sx={{ borderRadius: 3 }}>
+                        <CardContent sx={{ textAlign: "center", py: 8 }}>
+                            <AssignmentOutlinedIcon
+                                sx={{
+                                    fontSize: 54,
+                                    color: "text.disabled",
+                                    mb: 1,
+                                }}
+                            />
 
-{/* Выбор мастера */}
-<MasterAssignmentDialog
-    open={assignmentOpen}
-    request={details}
-    candidates={candidates}
-    selectedMasterId={selectedMasterId}
-    loading={candidatesLoading}
-    saving={assignmentSaving}
-    error={candidatesError}
-    onClose={closeAssignmentDialog}
-    onRetry={retryLoadCandidates}
-    onSelectMaster={setSelectedMasterId}
-    onConfirm={handleAssignMaster}
-/>
+                            <Typography variant="h6" fontWeight={700}>
+                                {requests.length === 0
+                                    ? "Заявок пока нет"
+                                    : "Заявки не найдены"}
+                            </Typography>
 
-{/* Подтверждение отмены */}
-<Dialog
-    open={Boolean(cancelTarget)}
-    onClose={() =>
-        !cancelling && setCancelTarget(null)
-    }
-    maxWidth="xs"
-    fullWidth
->
-    <DialogTitle fontWeight={800}>
-        Отменить заявку?
-    </DialogTitle>
+                            <Typography color="text.secondary" sx={{ mt: 1 }}>
+                                {requests.length === 0
+                                    ? "Когда появятся новые заявки, они отобразятся здесь."
+                                    : "Попробуйте изменить поисковый запрос или фильтр."}
+                            </Typography>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <Stack spacing={2}>
+                        {filteredRequests.map((request) => {
+                            const info = statusInfo(request.status);
 
-    <DialogContent dividers>
-        <Typography color="text.secondary">
-            Вы действительно хотите отменить заявку №{" "}
-            {String(cancelTarget?.id || "")}?
-        </Typography>
-    </DialogContent>
+                            return (
+                                <Card
+                                    key={request.id}
+                                    onClick={() => openRequest(request)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.key === "Enter" ||
+                                            event.key === " "
+                                        ) {
+                                            event.preventDefault();
+                                            openRequest(request);
+                                        }
+                                    }}
+                                    sx={{
+                                        borderRadius: 3,
+                                        cursor: "pointer",
+                                        transition: "box-shadow .2s, transform .2s",
+                                        "&:hover": {
+                                            boxShadow: 5,
+                                            transform: "translateY(-1px)",
+                                        },
+                                        "&:focus-visible": {
+                                            outline: "2px solid",
+                                            outlineColor: "primary.main",
+                                            outlineOffset: 2,
+                                        },
+                                    }}
+                                >
+                                    <CardContent sx={{ p: { xs: 2, md: 3 } }}>
+                                        <Stack
+                                            direction={{ xs: "column", sm: "row" }}
+                                            justifyContent="space-between"
+                                            alignItems={{ xs: "flex-start", sm: "center" }}
+                                            spacing={2}
+                                        >
+                                            <Stack
+                                                spacing={1.25}
+                                                sx={{ minWidth: 0, flex: 1 }}
+                                            >
+                                                <Stack
+                                                    direction="row"
+                                                    spacing={1}
+                                                    alignItems="center"
+                                                    flexWrap="wrap"
+                                                >
+                                                    <Typography
+                                                        fontWeight={800}
+                                                        sx={{ overflowWrap: "anywhere" }}
+                                                    >
+                                                        Заявка №{" "}
+                                                        {String(
+                                                            request.requestNumber ??
+                                                            request.number ??
+                                                            request.id
+                                                        )}
+                                                    </Typography>
 
-    <DialogActions sx={{ p: 2 }}>
-        <Button
-            onClick={() => setCancelTarget(null)}
-            disabled={cancelling}
-            sx={{ textTransform: "none" }}
-        >
-            Не отменять
-        </Button>
+                                                    <Chip
+                                                        label={info.label}
+                                                        color={info.color}
+                                                        size="small"
+                                                    />
+                                                </Stack>
 
-        <Button
-            color="error"
-            variant="contained"
-            onClick={handleCancelRequest}
-            disabled={cancelling}
-            startIcon={
-                cancelling
-                    ? <CircularProgress size={18} />
-                    : <CancelOutlinedIcon />
-            }
-        >
-            {cancelling
-                ? "Отмена..."
-                : "Да, отменить"}
-        </Button>
-    </DialogActions>
-</Dialog>
-</Box>
-</MainLayout>
-);
+                                                <Stack
+                                                    direction="row"
+                                                    spacing={1}
+                                                    alignItems="center"
+                                                >
+                                                    <AccessTimeIcon
+                                                        fontSize="small"
+                                                        color="action"
+                                                    />
+
+                                                    <Typography
+                                                        variant="body2"
+                                                        color="text.secondary"
+                                                    >
+                                                        Создана: {formatDate(request.createdAt)}
+                                                    </Typography>
+                                                </Stack>
+                                            </Stack>
+                                        </Stack>
+
+                                        <Divider sx={{ my: 2 }} />
+
+                                        <Stack
+                                            direction={{ xs: "column", md: "row" }}
+                                            alignItems="stretch"
+                                            spacing={2}
+                                        >
+                                            <Box
+                                                sx={{
+                                                    flex: 1,
+                                                    minWidth: 0,
+                                                    border: "1px solid",
+                                                    borderColor: "divider",
+                                                    borderRadius: 2,
+                                                    backgroundColor: "background.default",
+                                                    p: { xs: 1.25, md: 1.5 },
+                                                    overflow: "hidden",
+                                                }}
+                                            >
+                                                <RequestWorkflow
+                                                    status={request.status}
+                                                    compact
+                                                />
+                                            </Box>
+
+                                            <Box
+                                                sx={{
+                                                    minWidth: { xs: "auto", md: 180 },
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    px: { xs: 0, md: 1 },
+                                                }}
+                                            >
+                                                <Typography
+                                                    variant="body2"
+                                                    color="primary.main"
+                                                    fontWeight={600}
+                                                    sx={{ textAlign: "center" }}
+                                                >
+                                                    Открыть карточку
+                                                </Typography>
+                                            </Box>
+                                        </Stack>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </Stack>
+                )}
+
+                <RequestDetailsDialog
+                    request={details}
+                    loading={detailsLoading}
+                    error={detailsError}
+                    userRole={user?.role}
+                    onClose={closeRequestDetails}
+                    onAssign={(action) =>
+                        action === "reload"
+                            ? openRequest(selectedRequest)
+                            : openAssignmentDialog()
+                    }
+                    onCancelRequest={openCancelConfirmation}
+                    busy={assignmentSaving || cancelling}
+                />
+
+                <MasterAssignmentDialog
+                    open={assignmentOpen}
+                    request={details}
+                    candidates={candidates}
+                    selectedMasterId={selectedMasterId}
+                    loading={candidatesLoading}
+                    saving={assignmentSaving}
+                    error={candidatesError}
+                    onClose={closeAssignmentDialog}
+                    onRetry={retryLoadCandidates}
+                    onSelectMaster={setSelectedMasterId}
+                    onConfirm={handleAssignMaster}
+                />
+
+                <Dialog
+                    open={Boolean(cancelTarget)}
+                    onClose={() => !cancelling && setCancelTarget(null)}
+                    maxWidth="xs"
+                    fullWidth
+                >
+                    <DialogTitle fontWeight={800}>
+                        Отменить заявку?
+                    </DialogTitle>
+
+                    <DialogContent dividers>
+                        <Typography color="text.secondary">
+                            Вы действительно хотите отменить заявку №{" "}
+                            {String(cancelTarget?.id || "")}?
+                        </Typography>
+                    </DialogContent>
+
+                    <DialogActions sx={{ p: 2 }}>
+                        <Button
+                            onClick={() => setCancelTarget(null)}
+                            disabled={cancelling}
+                            sx={{ textTransform: "none" }}
+                        >
+                            Не отменять
+                        </Button>
+
+                        <Button
+                            color="error"
+                            variant="contained"
+                            onClick={handleCancelRequest}
+                            disabled={cancelling}
+                            startIcon={
+                                cancelling
+                                    ? <CircularProgress size={18} />
+                                    : <CancelOutlinedIcon />
+                            }
+                        >
+                            {cancelling ? "Отмена..." : "Да, отменить"}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+            </Box>
+        </MainLayout>
+    );
 }
