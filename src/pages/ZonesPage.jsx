@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
     Box,
     Button,
@@ -38,75 +39,143 @@ import {
     updateZone,
     deleteZone,
 } from "../api/zoneApi";
+import {
+    getAllCities,
+    getStreetsByCity,
+    getHousesByStreet,
+} from "../api/addressApi";
 
 export default function ZonesPage() {
     const [user, setUser] = useState(null);
     const [zones, setZones] = useState([]);
+    const [zoneAddresses, setZoneAddresses] = useState({});
     const [loading, setLoading] = useState(true);
+    const [addressesLoading, setAddressesLoading] = useState(false);
+    const [loadError, setLoadError] = useState("");
 
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState({});
 
     const [open, setOpen] = useState(false);
-    const [form, setForm] = useState({
-        name: "",
-        description: "",
-    });
+    const [form, setForm] = useState({ name: "", description: "" });
     const [editingZone, setEditingZone] = useState(null);
     const [deleteDialog, setDeleteDialog] = useState(false);
     const [selectedZone, setSelectedZone] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        setLoadError("");
+
+        try {
+            const [profile, zoneList, cities] = await Promise.all([
+                getCurrentProfile(),
+                getAllZones(),
+                getAllCities(),
+            ]);
+
+            const safeZones = Array.isArray(zoneList) ? zoneList : [];
+            const safeCities = Array.isArray(cities) ? cities : [];
+
+            setUser(profile);
+            setZones(safeZones);
+
+            // Загружаем улицы сразу, не дожидаясь раскрытия зоны.
+            setAddressesLoading(true);
+
+            const cityResults = await Promise.all(
+                safeCities.map(async (city) => {
+                    const streets = await getStreetsByCity(city.id);
+
+                    return (Array.isArray(streets) ? streets : []).map(
+                        (street) => ({
+                            ...street,
+                            cityId: street.cityId ?? city.id,
+                            cityName: street.cityName ?? city.name,
+                        })
+                    );
+                })
+            );
+
+            const allStreets = cityResults.flat();
+            const addresses = {};
+
+            for (const zone of safeZones) {
+                addresses[zone.id] = allStreets
+                    .filter(
+                        (street) =>
+                            String(street.zoneId) === String(zone.id)
+                    )
+                    .map((street) => ({
+                        ...street,
+                        houses: [],
+                        housesLoaded: false,
+                        housesLoading: false,
+                        housesError: "",
+                    }));
+            }
+
+            setZoneAddresses(addresses);
+        } catch (error) {
+            console.error("Ошибка загрузки зон и адресов:", error);
+            setLoadError(
+                "Не удалось загрузить адреса. Проверь доступность сервера."
+            );
+        } finally {
+            setAddressesLoading(false);
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         loadData();
-    }, []);
-
-    const loadData = async () => {
-        try {
-            setLoading(true);
-
-            const [profile, zoneList] = await Promise.all([
-                getCurrentProfile(),
-                getAllZones(),
-            ]);
-
-            setUser(profile);
-            setZones(Array.isArray(zoneList) ? zoneList : []);
-        } catch (e) {
-            console.error(e);
-            setZones([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [loadData]);
 
     const handleSave = async () => {
-        if (!form.name.trim()) return;
+        if (!form.name.trim() || saving) return;
+
+        setSaving(true);
 
         try {
+            const payload = {
+                name: form.name.trim(),
+                description: form.description.trim(),
+            };
+
             if (editingZone) {
-                await updateZone(editingZone.id, form);
+                await updateZone(editingZone.id, payload);
             } else {
-                await createZone(form);
+                await createZone(payload);
             }
 
             setOpen(false);
             setEditingZone(null);
             setForm({ name: "", description: "" });
 
-            loadData();
-        } catch (e) {
-            console.error(e);
-            alert("Ошибка сохранения зоны");
+            await loadData();
+        } catch (error) {
+            console.error(error);
+            alert(
+                error.response?.data?.message ||
+                "Ошибка сохранения зоны"
+            );
+        } finally {
+            setSaving(false);
         }
     };
+
+    const handleCreate = () => {
+        setEditingZone(null);
+        setForm({ name: "", description: "" });
+        setOpen(true);
+    };
+
     const handleEdit = (zone) => {
         setEditingZone(zone);
-
         setForm({
-            name: zone.name,
-            description: zone.description || "",
+            name: zone.name ?? "",
+            description: zone.description ?? "",
         });
-
         setOpen(true);
     };
 
@@ -116,50 +185,129 @@ export default function ZonesPage() {
     };
 
     const confirmDelete = async () => {
+        if (!selectedZone) return;
+
         try {
             await deleteZone(selectedZone.id);
-
             setDeleteDialog(false);
             setSelectedZone(null);
-
-            loadData();
-        } catch (e) {
-            const message =
-                e.response?.data?.message ||
-                "Невозможно удалить зону";
-
-            alert(message);
+            await loadData();
+        } catch (error) {
+            alert(
+                error.response?.data?.message ||
+                "Невозможно удалить зону"
+            );
         }
     };
 
-    const filteredZones = useMemo(() => {
-        return zones.filter((z) =>
-            `${z.name} ${z.description ?? ""}`
-                .toLowerCase()
-                .includes(search.toLowerCase())
+    const loadHousesForZone = async (zoneId) => {
+        const streets = zoneAddresses[zoneId] ?? [];
+
+        const unloaded = streets.filter(
+            (street) =>
+                !street.housesLoaded && !street.housesLoading
         );
-    }, [zones, search]);
 
-    const total = zones.length;
-    const used = zones.filter((z) => z.description?.trim()).length;
-    const free = total - used;
+        if (unloaded.length === 0) return;
 
-    const toggle = (id) => {
-        setExpanded((prev) => ({
-            ...prev,
-            [id]: !prev[id],
+        setZoneAddresses((previous) => ({
+            ...previous,
+            [zoneId]: (previous[zoneId] ?? []).map((street) =>
+                unloaded.some((item) => item.id === street.id)
+                    ? { ...street, housesLoading: true, housesError: "" }
+                    : street
+            ),
+        }));
+
+        const results = await Promise.all(
+            unloaded.map(async (street) => {
+                try {
+                    const houses = await getHousesByStreet(street.id);
+
+                    return {
+                        streetId: street.id,
+                        houses: Array.isArray(houses) ? houses : [],
+                        error: "",
+                    };
+                } catch (error) {
+                    console.error(
+                        `Ошибка загрузки домов улицы ${street.name}:`,
+                        error
+                    );
+
+                    return {
+                        streetId: street.id,
+                        houses: [],
+                        error: "Не удалось загрузить дома",
+                    };
+                }
+            })
+        );
+
+        const resultByStreet = new Map(
+            results.map((result) => [result.streetId, result])
+        );
+
+        setZoneAddresses((previous) => ({
+            ...previous,
+            [zoneId]: (previous[zoneId] ?? []).map((street) => {
+                const result = resultByStreet.get(street.id);
+
+                if (!result) return street;
+
+                return {
+                    ...street,
+                    houses: result.houses,
+                    housesLoaded: !result.error,
+                    housesLoading: false,
+                    housesError: result.error,
+                };
+            }),
         }));
     };
+
+    const toggle = async (zoneId) => {
+        const willExpand = !expanded[zoneId];
+
+        setExpanded((previous) => ({
+            ...previous,
+            [zoneId]: willExpand,
+        }));
+
+        if (willExpand) {
+            await loadHousesForZone(zoneId);
+        }
+    };
+
+    const filteredZones = useMemo(
+        () =>
+            zones.filter((zone) =>
+                `${zone.name ?? ""} ${zone.description ?? ""}`
+                    .toLowerCase()
+                    .includes(search.toLowerCase())
+            ),
+        [zones, search]
+    );
+
+    // Статус зависит от привязанных улиц, а не от описания зоны
+    // и не от того, раскрывал ли пользователь строку.
+    const total = zones.length;
+    const used = zones.filter(
+        (zone) => (zoneAddresses[zone.id] ?? []).length > 0
+    ).length;
+    const free = total - used;
 
     return (
         <MainLayout user={user}>
             <Box sx={{ p: 1 }}>
-
-                {/* Заголовок */}
                 <Box mb={3}>
-                    <Stack direction="row" spacing={0} alignItems="center">
+                    <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        flexWrap="wrap"
+                    >
                         <LocationOnIcon color="primary" />
-
                         <Typography variant="h4" fontWeight={700}>
                             Зоны обслуживания
                         </Typography>
@@ -173,20 +321,25 @@ export default function ZonesPage() {
                         )}
                     </Stack>
 
-                    <Typography color="text.secondary" mt={0.5} sx={{ mb: 2 }}>
+                    <Typography
+                        color="text.secondary"
+                        mt={0.5}
+                        sx={{ mb: 2 }}
+                    >
                         Создание и управление территориями обслуживания
                     </Typography>
                 </Box>
 
-                {/* Карточки */}
-                <Grid container spacing={3} mb={4} sx={{ mb: 5 }}>
+                <Grid container spacing={3} sx={{ mb: 5 }}>
                     <Grid item xs={12} md={4}>
                         <Card sx={{ borderRadius: 3, height: 120 }}>
                             <CardContent>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Всего зон
                                 </Typography>
-
                                 <Typography
                                     variant="h3"
                                     fontWeight={700}
@@ -202,10 +355,12 @@ export default function ZonesPage() {
                     <Grid item xs={12} md={4}>
                         <Card sx={{ borderRadius: 3, height: 120 }}>
                             <CardContent>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Использовано
                                 </Typography>
-
                                 <Typography
                                     variant="h3"
                                     fontWeight={700}
@@ -221,10 +376,12 @@ export default function ZonesPage() {
                     <Grid item xs={12} md={4}>
                         <Card sx={{ borderRadius: 3, height: 120 }}>
                             <CardContent>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                >
                                     Не использовано
                                 </Typography>
-
                                 <Typography
                                     variant="h3"
                                     fontWeight={700}
@@ -238,23 +395,20 @@ export default function ZonesPage() {
                     </Grid>
                 </Grid>
 
-                {/* Поиск */}
                 <Card sx={{ borderRadius: 3, mb: 3 }}>
                     <CardContent>
                         <Typography variant="h6" fontWeight={700} mb={2}>
                             Поиск зон
                         </Typography>
-
                         <TextField
                             fullWidth
                             placeholder="Название или описание зоны..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(event) => setSearch(event.target.value)}
                         />
                     </CardContent>
                 </Card>
 
-                {/* Таблица */}
                 <Card sx={{ borderRadius: 3 }}>
                     <CardContent>
                         <Box
@@ -262,6 +416,7 @@ export default function ZonesPage() {
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
+                                gap: 2,
                                 mb: 2,
                             }}
                         >
@@ -274,7 +429,7 @@ export default function ZonesPage() {
                                     variant="contained"
                                     size="small"
                                     startIcon={<AddIcon />}
-                                    onClick={() => setOpen(true)}
+                                    onClick={handleCreate}
                                     sx={{
                                         borderRadius: 2,
                                         minWidth: 150,
@@ -289,186 +444,310 @@ export default function ZonesPage() {
                             )}
                         </Box>
 
+                        {loadError && (
+                            <Typography color="error" sx={{ mb: 2 }}>
+                                {loadError}
+                            </Typography>
+                        )}
+
                         {loading ? (
                             <Box py={6} textAlign="center">
                                 <CircularProgress />
                             </Box>
-                        ) : (<Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell width={50}></TableCell>
-                                    <TableCell width={60}>№</TableCell>
-                                    <TableCell>Зона</TableCell>
-                                    <TableCell>Описание</TableCell>
-                                    <TableCell width={150}>Статус</TableCell>
-
-                                    {user?.role === "ADMIN" && (
-                                        <TableCell width={140} align="center">
-                                            Действия
-                                        </TableCell>
-                                    )}
-                                </TableRow>
-                            </TableHead>
-
-                            <TableBody>
-                                {filteredZones.length === 0 ? (
+                        ) : (
+                            <Table>
+                                <TableHead>
                                     <TableRow>
-                                        <TableCell
-                                            colSpan={user?.role === "ADMIN" ? 6 : 5}
-                                            align="center"
-                                        >
-                                            <Box py={4}>
-                                                <Typography color="text.secondary">
-                                                    Зоны отсутствуют
-                                                </Typography>
-                                            </Box>
-                                        </TableCell>
+                                        <TableCell width={50} />
+                                        <TableCell width={60}>№</TableCell>
+                                        <TableCell>Зона</TableCell>
+                                        <TableCell>Описание</TableCell>
+                                        <TableCell width={150}>Статус</TableCell>
+                                        {user?.role === "ADMIN" && (
+                                            <TableCell
+                                                width={140}
+                                                align="center"
+                                            >
+                                                Действия
+                                            </TableCell>
+                                        )}
                                     </TableRow>
-                                ) : (
-                                    filteredZones.map((zone, index) => (
-                                        <>
-                                            <TableRow hover key={zone.id}>
-                                                <TableCell>
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={() => toggle(zone.id)}
-                                                    >
-                                                        {expanded[zone.id] ? (
-                                                            <KeyboardArrowDownIcon />
-                                                        ) : (
-                                                            <KeyboardArrowRightIcon />
-                                                        )}
-                                                    </IconButton>
-                                                </TableCell>
+                                </TableHead>
 
-                                                <TableCell>{index + 1}</TableCell>
-
-                                                <TableCell>
-                                                    <Typography fontWeight={700}>
-                                                        {zone.name}
+                                <TableBody>
+                                    {filteredZones.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={
+                                                    user?.role === "ADMIN"
+                                                        ? 6
+                                                        : 5
+                                                }
+                                                align="center"
+                                            >
+                                                <Box py={4}>
+                                                    <Typography color="text.secondary">
+                                                        Зоны отсутствуют
                                                     </Typography>
-                                                </TableCell>
+                                                </Box>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        filteredZones.map((zone, index) => {
+                                            const streets =
+                                                zoneAddresses[zone.id] ?? [];
+                                            const isUsed = streets.length > 0;
 
-                                                <TableCell>
-                                                    {zone.description || "Без описания"}
-                                                </TableCell>
-
-                                                <TableCell>
-                                                    <Chip
-                                                        label={
-                                                            zone.description
-                                                                ? "Используется"
-                                                                : "Свободна"
-                                                        }
-                                                        color={
-                                                            zone.description
-                                                                ? "success"
-                                                                : "warning"
-                                                        }
-                                                        size="small"
-                                                    />
-                                                </TableCell>
-
-                                                {user?.role === "ADMIN" && (
-                                                    <TableCell align="center">
-                                                        <Stack
-                                                            direction="row"
-                                                            spacing={1}
-                                                            justifyContent="center"
-                                                        >
+                                            return (
+                                                <Fragment key={zone.id}>
+                                                    <TableRow hover>
+                                                        <TableCell>
                                                             <IconButton
                                                                 size="small"
-                                                                color="primary"
-                                                                sx={{
-                                                                    bgcolor: "#EEF4FF",
-                                                                    "&:hover": {
-                                                                        bgcolor: "#DCE8FF",
-                                                                    },
-                                                                }}
-                                                                onClick={() => handleEdit(zone)}
+                                                                onClick={() =>
+                                                                    toggle(zone.id)
+                                                                }
+                                                                disabled={
+                                                                    addressesLoading &&
+                                                                    !Object.prototype.hasOwnProperty.call(
+                                                                        zoneAddresses,
+                                                                        zone.id
+                                                                    )
+                                                                }
                                                             >
-                                                                <EditIcon fontSize="small" />
+                                                                {expanded[zone.id] ? (
+                                                                    <KeyboardArrowDownIcon />
+                                                                ) : (
+                                                                    <KeyboardArrowRightIcon />
+                                                                )}
                                                             </IconButton>
+                                                        </TableCell>
 
-                                                            <IconButton
+                                                        <TableCell>
+                                                            {index + 1}
+                                                        </TableCell>
+
+                                                        <TableCell>
+                                                            <Typography fontWeight={700}>
+                                                                {zone.name}
+                                                            </Typography>
+                                                        </TableCell>
+
+                                                        <TableCell>
+                                                            {zone.description ||
+                                                                "Без описания"}
+                                                        </TableCell>
+
+                                                        <TableCell>
+                                                            <Chip
+                                                                label={
+                                                                    addressesLoading &&
+                                                                    !Object.prototype.hasOwnProperty.call(
+                                                                        zoneAddresses,
+                                                                        zone.id
+                                                                    )
+                                                                        ? "Загрузка..."
+                                                                        : isUsed
+                                                                          ? "Используется"
+                                                                          : "Свободна"
+                                                                }
+                                                                color={
+                                                                    isUsed
+                                                                        ? "success"
+                                                                        : "warning"
+                                                                }
                                                                 size="small"
-                                                                color="error"
-                                                                sx={{
-                                                                    bgcolor: "#FEECEC",
-                                                                    "&:hover": {
-                                                                        bgcolor: "#FCD7D7",
-                                                                    },
-                                                                }}
-                                                                onClick={() => handleDeleteClick(zone)}
-                                                            >
-                                                                <DeleteIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </Stack>
-                                                    </TableCell>
-                                                )}
-                                            </TableRow>
+                                                            />
+                                                        </TableCell>
 
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={user?.role === "ADMIN" ? 6 : 5}
-                                                    sx={{ p: 0, border: 0 }}
-                                                >
-                                                    <Collapse in={expanded[zone.id]}>
-                                                        <Box
+                                                        {user?.role === "ADMIN" && (
+                                                            <TableCell align="center">
+                                                                <Stack
+                                                                    direction="row"
+                                                                    spacing={1}
+                                                                    justifyContent="center"
+                                                                >
+                                                                    <IconButton
+                                                                        size="small"
+                                                                        color="primary"
+                                                                        sx={{
+                                                                            bgcolor: "#EEF4FF",
+                                                                            "&:hover": {
+                                                                                bgcolor: "#DCE8FF",
+                                                                            },
+                                                                        }}
+                                                                        onClick={() =>
+                                                                            handleEdit(zone)
+                                                                        }
+                                                                    >
+                                                                        <EditIcon fontSize="small" />
+                                                                    </IconButton>
+
+                                                                    <IconButton
+                                                                        size="small"
+                                                                        color="error"
+                                                                        sx={{
+                                                                            bgcolor: "#FEECEC",
+                                                                            "&:hover": {
+                                                                                bgcolor: "#FCD7D7",
+                                                                            },
+                                                                        }}
+                                                                        onClick={() =>
+                                                                            handleDeleteClick(zone)
+                                                                        }
+                                                                    >
+                                                                        <DeleteIcon fontSize="small" />
+                                                                    </IconButton>
+                                                                </Stack>
+                                                            </TableCell>
+                                                        )}
+                                                    </TableRow>
+
+                                                    <TableRow>
+                                                        <TableCell
+                                                            colSpan={
+                                                                user?.role === "ADMIN"
+                                                                    ? 6
+                                                                    : 5
+                                                            }
                                                             sx={{
-                                                                bgcolor: "#F8FAFC",
-                                                                px: 8,
-                                                                py: 2,
-                                                                borderTop:
-                                                                    "1px solid #E5E7EB",
+                                                                p: 0,
+                                                                border: 0,
                                                             }}
                                                         >
-                                                            <Typography
-                                                                fontWeight={600}
-                                                                color="text.secondary"
-                                                                mb={1}
+                                                            <Collapse
+                                                                in={Boolean(
+                                                                    expanded[zone.id]
+                                                                )}
+                                                                unmountOnExit={false}
                                                             >
-                                                                Адреса зоны
-                                                            </Typography>
+                                                                <Box
+                                                                    sx={{
+                                                                        bgcolor: "#F8FAFC",
+                                                                        px: { xs: 2, md: 8 },
+                                                                        py: 2,
+                                                                        borderTop:
+                                                                            "1px solid #E5E7EB",
+                                                                    }}
+                                                                >
+                                                                    <Typography
+                                                                        fontWeight={600}
+                                                                        color="text.secondary"
+                                                                        mb={2}
+                                                                    >
+                                                                        Адреса зоны
+                                                                        «{zone.name}»
+                                                                    </Typography>
 
-                                                            <Typography
-                                                                variant="body2"
-                                                                color="text.secondary"
-                                                            >
-                                                                Здесь в будущем будет
-                                                                раскрывающееся дерево
-                                                                адресов этой зоны.
-                                                            </Typography>
-                                                        </Box>
-                                                    </Collapse>
-                                                </TableCell>
-                                            </TableRow>
-                                        </>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                                                                    {addressesLoading &&
+                                                                    !Object.prototype.hasOwnProperty.call(
+                                                                        zoneAddresses,
+                                                                        zone.id
+                                                                    ) ? (
+                                                                        <CircularProgress size={22} />
+                                                                    ) : streets.length === 0 ? (
+                                                                        <Typography
+                                                                            variant="body2"
+                                                                            color="text.secondary"
+                                                                        >
+                                                                            К этой зоне пока не привязаны улицы.
+                                                                        </Typography>
+                                                                    ) : (
+                                                                        <Stack spacing={1.5}>
+                                                                            {streets.map(
+                                                                                (street) => (
+                                                                                    <Box
+                                                                                        key={street.id}
+                                                                                        sx={{
+                                                                                            p: 1.5,
+                                                                                            bgcolor: "#FFFFFF",
+                                                                                            border: "1px solid #E5E7EB",
+                                                                                            borderRadius: 2,
+                                                                                        }}
+                                                                                    >
+                                                                                        <Typography fontWeight={600}>
+                                                                                            {street.cityName ||
+                                                                                                "Город не указан"}{" "}
+                                                                                            — {street.name}
+                                                                                        </Typography>
+
+                                                                                        <Stack
+                                                                                            direction="row"
+                                                                                            spacing={1}
+                                                                                            useFlexGap
+                                                                                            flexWrap="wrap"
+                                                                                            mt={1}
+                                                                                        >
+                                                                                            {street.housesLoading ? (
+                                                                                                <CircularProgress size={18} />
+                                                                                            ) : street.housesError ? (
+                                                                                                <Typography
+                                                                                                    variant="body2"
+                                                                                                    color="error"
+                                                                                                >
+                                                                                                    {street.housesError}
+                                                                                                </Typography>
+                                                                                            ) : !street.housesLoaded ? (
+                                                                                                <Typography
+                                                                                                    variant="body2"
+                                                                                                    color="text.secondary"
+                                                                                                >
+                                                                                                    Дома ещё не загружены
+                                                                                                </Typography>
+                                                                                            ) : street.houses.length === 0 ? (
+                                                                                                <Typography
+                                                                                                    variant="body2"
+                                                                                                    color="text.secondary"
+                                                                                                >
+                                                                                                    Дома не добавлены
+                                                                                                </Typography>
+                                                                                            ) : (
+                                                                                                street.houses.map(
+                                                                                                    (house) => (
+                                                                                                        <Chip
+                                                                                                            key={house.id}
+                                                                                                            size="small"
+                                                                                                            variant="outlined"
+                                                                                                            label={`Дом ${house.number}`}
+                                                                                                        />
+                                                                                                    )
+                                                                                                )
+                                                                                            )}
+                                                                                        </Stack>
+                                                                                    </Box>
+                                                                                )
+                                                                            )}
+                                                                        </Stack>
+                                                                    )}
+                                                                </Box>
+                                                            </Collapse>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                </Fragment>
+                                            );
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
                         )}
                     </CardContent>
                 </Card>
+
                 <Dialog
                     open={deleteDialog}
                     onClose={() => setDeleteDialog(false)}
                 >
                     <DialogTitle>Удаление зоны</DialogTitle>
-
                     <DialogContent>
                         <Typography>
                             Точно хотите удалить зону{" "}
                             <b>{selectedZone?.name}</b>?
                         </Typography>
                     </DialogContent>
-
                     <DialogActions>
                         <Button onClick={() => setDeleteDialog(false)}>
                             Отмена
                         </Button>
-
                         <Button
                             color="error"
                             variant="contained"
@@ -478,14 +757,16 @@ export default function ZonesPage() {
                         </Button>
                     </DialogActions>
                 </Dialog>
-                {/* Модалка создания */}
+
                 <Dialog
                     open={open}
                     onClose={() => setOpen(false)}
                     maxWidth="sm"
                     fullWidth
                 >
-                    <DialogTitle>Создание новой зоны</DialogTitle>
+                    <DialogTitle>
+                        {editingZone ? "Редактирование зоны" : "Создание новой зоны"}
+                    </DialogTitle>
 
                     <DialogContent>
                         <Stack spacing={2} mt={1}>
@@ -493,8 +774,11 @@ export default function ZonesPage() {
                                 label="Название зоны"
                                 fullWidth
                                 value={form.name}
-                                onChange={(e) =>
-                                    setForm({ ...form, name: e.target.value })
+                                onChange={(event) =>
+                                    setForm({
+                                        ...form,
+                                        name: event.target.value,
+                                    })
                                 }
                             />
 
@@ -504,10 +788,10 @@ export default function ZonesPage() {
                                 rows={4}
                                 fullWidth
                                 value={form.description}
-                                onChange={(e) =>
+                                onChange={(event) =>
                                     setForm({
                                         ...form,
-                                        description: e.target.value,
+                                        description: event.target.value,
                                     })
                                 }
                             />
@@ -518,9 +802,16 @@ export default function ZonesPage() {
                         <Button onClick={() => setOpen(false)}>
                             Отмена
                         </Button>
-
-                        <Button variant="contained" onClick={handleSave}>
-                            {editingZone ? "Сохранить" : "Создать"}
+                        <Button
+                            variant="contained"
+                            onClick={handleSave}
+                            disabled={saving}
+                        >
+                            {saving
+                                ? "Сохранение..."
+                                : editingZone
+                                  ? "Сохранить"
+                                  : "Создать"}
                         </Button>
                     </DialogActions>
                 </Dialog>
