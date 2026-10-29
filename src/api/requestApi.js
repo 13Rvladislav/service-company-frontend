@@ -331,4 +331,27 @@ export async function downloadWorkReportAttachment(
         filename,
     };
 }
+/**
+ * Принять выполненные работы клиентом.
+ * POST /api/requests/{requestId}/report/accept
+ */
+export function acceptWorkReport(requestId) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/report/accept`,
+        { method: "POST" }
+    );
+}
 
+/**
+ * Вернуть работы на доработку.
+ * POST /api/requests/{requestId}/report/rework
+ */
+export function requestWorkReportRework(requestId, reason) {
+    return requestApi(
+        `/requests/${encodeURIComponent(requestId)}/report/rework`,
+        {
+            method: "POST",
+            body: JSON.stringify({ reason }),
+        }
+    );
+}
