@@ -27,6 +27,7 @@ import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import EngineeringOutlinedIcon from "@mui/icons-material/EngineeringOutlined";
 import AssignmentIndOutlinedIcon from "@mui/icons-material/AssignmentIndOutlined";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -48,12 +49,14 @@ export default function Sidebar({ user }) {
     isSpecializationsPage ||
     location.pathname.startsWith("/zones/assign");
 
-  const isDispatcherZonesPage = location.pathname.startsWith("/zones/assign");
+  const isDispatcherZonesPage =
+    location.pathname.startsWith("/zones/assign");
 
   const [locationsOpen, setLocationsOpen] = useState(isLocationsPage);
   const [equipmentOpen, setEquipmentOpen] = useState(isEquipmentPage);
-  const [specializationsOpen, setSpecializationsOpen] =
-    useState(isAdminMastersPage || isDispatcherZonesPage);
+  const [specializationsOpen, setSpecializationsOpen] = useState(
+    isAdminMastersPage || isDispatcherZonesPage
+  );
 
   const mainItemSx = {
     minHeight: 44,
@@ -68,13 +71,17 @@ export default function Sidebar({ user }) {
     "&:hover": {
       backgroundColor: "rgba(255,255,255,.08)",
       color: "#FFFFFF",
-      "& .MuiListItemIcon-root": { color: "#FFFFFF" },
+      "& .MuiListItemIcon-root": {
+        color: "#FFFFFF",
+      },
     },
     "&.active": {
       backgroundColor: "#2563EB",
       color: "#FFFFFF",
       boxShadow: "0 4px 12px rgba(37,99,235,.30)",
-      "& .MuiListItemIcon-root": { color: "#FFFFFF" },
+      "& .MuiListItemIcon-root": {
+        color: "#FFFFFF",
+      },
     },
   };
 
@@ -85,17 +92,23 @@ export default function Sidebar({ user }) {
     borderRadius: 2,
     mb: 0.5,
     color: "#CBD5E1",
-    "& .MuiListItemIcon-root": { color: "#94A3B8" },
+    "& .MuiListItemIcon-root": {
+      color: "#94A3B8",
+    },
     "&:hover": {
       backgroundColor: "rgba(255,255,255,.08)",
       color: "#FFFFFF",
-      "& .MuiListItemIcon-root": { color: "#FFFFFF" },
+      "& .MuiListItemIcon-root": {
+        color: "#FFFFFF",
+      },
     },
     "&.active": {
       backgroundColor: "rgba(37,99,235,.95)",
       color: "#FFFFFF",
       boxShadow: "inset 3px 0 0 #93C5FD",
-      "& .MuiListItemIcon-root": { color: "#FFFFFF" },
+      "& .MuiListItemIcon-root": {
+        color: "#FFFFFF",
+      },
     },
   };
 
@@ -112,7 +125,9 @@ export default function Sidebar({ user }) {
     "&:hover": {
       backgroundColor: "rgba(255,255,255,.08)",
       color: "#FFFFFF",
-      "& .MuiListItemIcon-root": { color: "#FFFFFF" },
+      "& .MuiListItemIcon-root": {
+        color: "#FFFFFF",
+      },
     },
   });
 
@@ -145,7 +160,10 @@ export default function Sidebar({ user }) {
 
         <ListItemText
           primary={label}
-          primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+          primaryTypographyProps={{
+            fontSize: 14,
+            fontWeight: 500,
+          }}
         />
       </ListItemButton>
     </ListItem>
@@ -165,7 +183,9 @@ export default function Sidebar({ user }) {
 
         <ListItemText
           primary={label}
-          primaryTypographyProps={{ fontSize: 13 }}
+          primaryTypographyProps={{
+            fontSize: 13,
+          }}
         />
       </ListItemButton>
     </ListItem>
@@ -188,13 +208,20 @@ export default function Sidebar({ user }) {
 
           <ListItemText
             primary={title}
-            primaryTypographyProps={{ fontSize: 14, fontWeight: 500 }}
+            primaryTypographyProps={{
+              fontSize: 14,
+              fontWeight: 500,
+            }}
           />
 
           {open ? (
-            <ExpandMoreIcon sx={{ fontSize: 20, color: "#94A3B8" }} />
+            <ExpandMoreIcon
+              sx={{ fontSize: 20, color: "#94A3B8" }}
+            />
           ) : (
-            <ChevronRightIcon sx={{ fontSize: 20, color: "#94A3B8" }} />
+            <ChevronRightIcon
+              sx={{ fontSize: 20, color: "#94A3B8" }}
+            />
           )}
         </ListItemButton>
       </ListItem>
@@ -207,7 +234,7 @@ export default function Sidebar({ user }) {
     </>
   );
 
-  // Локации: исходные пункты без назначения зон.
+  // Локации
   const renderLocations = () =>
     renderGroup({
       title: "Локации",
@@ -217,12 +244,23 @@ export default function Sidebar({ user }) {
       active: isLocationsPage,
       children: (
         <>
-          {renderNestedItem("/addresses", "Адреса", HomeWorkOutlinedIcon)}
-          {renderNestedItem("/zones", "Зоны", MapOutlinedIcon, true)}
+          {renderNestedItem(
+            "/addresses",
+            "Адреса",
+            HomeWorkOutlinedIcon
+          )}
+
+          {renderNestedItem(
+            "/zones",
+            "Зоны",
+            MapOutlinedIcon,
+            true
+          )}
         </>
       ),
     });
 
+  // Оборудование
   const renderEquipment = () =>
     renderGroup({
       title: "Оборудование",
@@ -248,8 +286,7 @@ export default function Sidebar({ user }) {
       ),
     });
 
-  // Администратор: назначение специализаций и зон находится
-  // в одной существующей группе «Администрирование мастеров».
+  // Администрирование мастеров для администратора
   const renderAdminSpecializations = () =>
     renderGroup({
       title: "Администрирование мастеров",
@@ -281,7 +318,7 @@ export default function Sidebar({ user }) {
       ),
     });
 
-  // Диспетчер: сохраняем исходную группу и её пункты.
+  // Управление мастерами для диспетчера
   const renderDispatcherSpecializations = () =>
     renderGroup({
       title: "Управление мастерами",
@@ -296,6 +333,7 @@ export default function Sidebar({ user }) {
             "Назначение специализаций",
             AssignmentIndOutlinedIcon
           )}
+
           {renderNestedItem(
             "/zones/assign",
             "Назначение зон",
@@ -305,35 +343,89 @@ export default function Sidebar({ user }) {
       ),
     });
 
+  // Меню администратора
   const renderAdminMenu = () => (
     <>
       <SectionTitle>ОБЩЕЕ</SectionTitle>
-      {renderItem("/dashboard", "Главная", DashboardOutlinedIcon, true)}
-      {renderItem("/profile", "Профиль", PersonOutlineOutlinedIcon)}
+
+      {renderItem(
+        "/dashboard",
+        "Главная",
+        DashboardOutlinedIcon,
+        true
+      )}
+
+      {renderItem(
+        "/profile",
+        "Профиль",
+        PersonOutlineOutlinedIcon
+      )}
 
       <SectionTitle>РАБОТА</SectionTitle>
-      {renderItem("/requests", "Все заявки", AssignmentOutlinedIcon)}
+
+      {renderItem(
+        "/requests",
+        "Все заявки",
+        AssignmentOutlinedIcon
+      )}
+
+      {renderItem(
+        "/analytics",
+        "Аналитика",
+        AssessmentOutlinedIcon
+      )}
 
       <SectionTitle>АДМИНИСТРИРОВАНИЕ</SectionTitle>
-      {renderItem("/users", "Пользователи", PeopleOutlineOutlinedIcon)}
+
+      {renderItem(
+        "/users",
+        "Пользователи",
+        PeopleOutlineOutlinedIcon
+      )}
+
       {renderLocations()}
       {renderEquipment()}
       {renderAdminSpecializations()}
     </>
   );
 
+  // Меню диспетчера
   const renderDispatcherMenu = () => (
     <>
       <SectionTitle>ОБЩЕЕ</SectionTitle>
-      {renderItem("/dashboard", "Главная", DashboardOutlinedIcon, true)}
-      {renderItem("/profile", "Профиль", PersonOutlineOutlinedIcon)}
+
+      {renderItem(
+        "/dashboard",
+        "Главная",
+        DashboardOutlinedIcon,
+        true
+      )}
+
+      {renderItem(
+        "/profile",
+        "Профиль",
+        PersonOutlineOutlinedIcon
+      )}
 
       <SectionTitle>РАБОТА</SectionTitle>
-      {renderItem("/requests", "Заявки", AssignmentOutlinedIcon)}
+
+      {renderItem(
+        "/requests",
+        "Заявки",
+        AssignmentOutlinedIcon
+      )}
+
+      {renderItem(
+        "/analytics",
+        "Аналитика",
+        AssessmentOutlinedIcon
+      )}
+
       {renderDispatcherSpecializations()}
     </>
   );
 
+  // Меню инженера
   const renderEngineerMenu = () => (
     <>
       <SectionTitle>ОБЩЕЕ</SectionTitle>
@@ -361,15 +453,37 @@ export default function Sidebar({ user }) {
     </>
   );
 
+  // Меню клиента
   const renderClientMenu = () => (
     <>
       <SectionTitle>ОБЩЕЕ</SectionTitle>
-      {renderItem("/dashboard", "Главная", DashboardOutlinedIcon, true)}
-      {renderItem("/profile", "Профиль", PersonOutlineOutlinedIcon)}
+
+      {renderItem(
+        "/dashboard",
+        "Главная",
+        DashboardOutlinedIcon,
+        true
+      )}
+
+      {renderItem(
+        "/profile",
+        "Профиль",
+        PersonOutlineOutlinedIcon
+      )}
 
       <SectionTitle>РАБОТА</SectionTitle>
-      {renderItem("/my-requests", "Мои заявки", AssignmentOutlinedIcon)}
-      {renderItem("/my-equipment", "Моё оборудование", BuildOutlinedIcon)}
+
+      {renderItem(
+        "/my-requests",
+        "Мои заявки",
+        AssignmentOutlinedIcon
+      )}
+
+      {renderItem(
+        "/my-equipment",
+        "Моё оборудование",
+        BuildOutlinedIcon
+      )}
     </>
   );
 
@@ -388,7 +502,9 @@ export default function Sidebar({ user }) {
         backgroundColor: "#1E3A8A",
         color: "#FFFFFF",
         overflowY: "auto",
-        "&::-webkit-scrollbar": { width: 5 },
+        "&::-webkit-scrollbar": {
+          width: 5,
+        },
         "&::-webkit-scrollbar-thumb": {
           backgroundColor: "rgba(255,255,255,.2)",
           borderRadius: 10,
@@ -421,13 +537,21 @@ export default function Sidebar({ user }) {
 
           <Box>
             <Typography
-              sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.1 }}
+              sx={{
+                fontSize: 15,
+                fontWeight: 700,
+                lineHeight: 1.1,
+              }}
             >
               Service
             </Typography>
 
             <Typography
-              sx={{ fontSize: 11, color: "#BFDBFE", lineHeight: 1.1 }}
+              sx={{
+                fontSize: 11,
+                color: "#BFDBFE",
+                lineHeight: 1.1,
+              }}
             >
               Company
             </Typography>

@@ -1,8 +1,9 @@
+
 import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
+    BrowserRouter,
+    Routes,
+    Route,
+    Navigate,
 } from "react-router-dom";
 
 import LoginPage from "../pages/LoginPage";
@@ -19,10 +20,7 @@ import EquipmentTypesPage from "../pages/EquipmentTypesPage";
 import EquipmentPage from "../pages/EquipmentPage";
 import MyEquipmentPage from "../pages/MyEquipmentPage";
 
-
-// Отдельная страница управления заявками
 import RequestManagementPage from "../pages/RequestManagementPage";
-
 import SpecializationsPage from "../pages/SpecializationsPage";
 import SpecializationAssignmentPage from "../pages/SpecializationAssignmentPage";
 import AssignMasterZonesPage from "../pages/AssignMasterZonesPage";
@@ -30,70 +28,116 @@ import AssignMasterZonesPage from "../pages/AssignMasterZonesPage";
 import ProtectedRoute from "./ProtectedRoute";
 import MyRequestsPage from "../pages/MyRequestsPage";
 import MasterRequestPage from "../pages/MasterRequestPage";
+import AnalyticsPage from "../pages/AnalyticsPage";
 
 export default function AppRouter() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Публичные страницы */}
-        <Route path="/" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    return (
+        <BrowserRouter>
+            <Routes>
+                {/* Публичные страницы */}
+                <Route path="/" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route
+                    path="/forgot-password"
+                    element={<ForgotPasswordPage />}
+                />
 
-        {/* Защищённые страницы */}
-        <Route element={<ProtectedRoute />}>
-          {/* Общее */}
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+                {/* Статистика: только ADMIN и DISPATCHER */}
+                <Route
+                    element={
+                        <ProtectedRoute
+                            allowedRoles={["ADMIN", "DISPATCHER"]}
+                        />
+                    }
+                >
+                    <Route
+                        path="/analytics"
+                        element={<AnalyticsPage />}
+                    />
+                </Route>
 
-          {/* Заявки клиента */}
-          <Route path="/my-requests" element={<MyRequestsPage />} />
+                {/* Остальные защищённые страницы */}
+                <Route element={<ProtectedRoute />}>
+                    <Route
+                        path="/dashboard"
+                        element={<DashboardPage />}
+                    />
+                    <Route
+                        path="/profile"
+                        element={<ProfilePage />}
+                    />
 
-          {/* Управление заявками для ADMIN и DISPATCHER */}
-          <Route
-            path="/requests"
-            element={<RequestManagementPage />}
-          />
+                    {/* Заявки клиента */}
+                    <Route
+                        path="/my-requests"
+                        element={<MyRequestsPage />}
+                    />
 
-          {/* Локации */}
-          <Route path="/addresses" element={<AddressesPage />} />
-          <Route path="/zones" element={<ZonesPage />} />
+                    {/* Управление заявками */}
+                    <Route
+                        path="/requests"
+                        element={<RequestManagementPage />}
+                    />
 
-          {/* Пользователи */}
-          <Route path="/users" element={<UsersPage />} />
+                    {/* Локации */}
+                    <Route
+                        path="/addresses"
+                        element={<AddressesPage />}
+                    />
+                    <Route
+                        path="/zones"
+                        element={<ZonesPage />}
+                    />
 
-          {/* Оборудование */}
-          <Route
-            path="/equipment/types"
-            element={<EquipmentTypesPage />}
-          />
-          <Route path="/equipment" element={<EquipmentPage />} />
-          <Route path="/my-equipment" element={<MyEquipmentPage />} />
+                    {/* Пользователи */}
+                    <Route
+                        path="/users"
+                        element={<UsersPage />}
+                    />
 
-          {/* Специализации */}
-          <Route
-            path="/specializations"
-            element={<SpecializationsPage />}
-          />
-          <Route
-            path="/specializations/assign"
-            element={<SpecializationAssignmentPage />}
-          />
-          {/* Заявки мастера */}
-          <Route
-            path="/master-requests"
-            element={<MasterRequestPage />}
-          />
-          {/* Назначение зон мастерам */}
-          <Route
-            path="/zones/assign"
-            element={<AssignMasterZonesPage />}
-          />
-        </Route>
+                    {/* Оборудование */}
+                    <Route
+                        path="/equipment/types"
+                        element={<EquipmentTypesPage />}
+                    />
+                    <Route
+                        path="/equipment"
+                        element={<EquipmentPage />}
+                    />
+                    <Route
+                        path="/my-equipment"
+                        element={<MyEquipmentPage />}
+                    />
 
-        {/* Неизвестный маршрут */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+                    {/* Специализации */}
+                    <Route
+                        path="/specializations"
+                        element={<SpecializationsPage />}
+                    />
+                    <Route
+                        path="/specializations/assign"
+                        element={<SpecializationAssignmentPage />}
+                    />
+
+                    {/* Заявки мастера */}
+                    <Route
+                        path="/master-requests"
+                        element={<MasterRequestPage />}
+                    />
+
+                    {/* Назначение зон */}
+                    <Route
+                        path="/zones/assign"
+                        element={<AssignMasterZonesPage />}
+                    />
+                </Route>
+
+                {/* Неизвестный маршрут */}
+                <Route
+                    path="*"
+                    element={<Navigate to="/" replace />}
+                />
+            </Routes>
+        </BrowserRouter>
+    );
 }
