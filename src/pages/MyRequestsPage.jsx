@@ -271,6 +271,7 @@ function RequestDetailsDialog({
     onClose,
     onEdit,
     onCancel,
+    onStatusChange,
     busy,
 }) {
     if (!request) return null;
@@ -463,6 +464,9 @@ function RequestDetailsDialog({
                         <WorkReportViewer
                             requestId={request.id}
                             requestStatus={request.status}
+                            onDecision={(newStatus) =>
+                                onStatusChange?.(request.id, newStatus)
+                            }
                         />
                     )}
 
@@ -781,6 +785,22 @@ export default function MyRequestsPage() {
         }
     };
 
+    const handleRequestStatusChange = useCallback((requestId, newStatus) => {
+        setRequests((previous) =>
+            previous.map((request) =>
+                request.id === requestId
+                    ? { ...request, status: newStatus }
+                    : request
+            )
+        );
+
+        setSelectedRequest((previous) =>
+            previous?.id === requestId
+                ? { ...previous, status: newStatus }
+                : previous
+        );
+    }, []);
+
     const openEditDialog = (request) => {
         if (
             !request ||
@@ -1055,8 +1075,8 @@ export default function MyRequestsPage() {
             ]);
 
             setCreateOpen(false);
+            setSelectedRequest(null);
             setSuccess("Заявка успешно создана.");
-            setSelectedRequest(created);
         } catch (requestError) {
             console.error(
                 "Ошибка создания заявки:",
@@ -2050,6 +2070,7 @@ export default function MyRequestsPage() {
                 onClose={() => setSelectedRequest(null)}
                 onEdit={() => openEditDialog(selectedRequest)}
                 onCancel={() => setCancelTarget(selectedRequest)}
+                onStatusChange={handleRequestStatusChange}
                 busy={editing || cancelling}
             />
 
