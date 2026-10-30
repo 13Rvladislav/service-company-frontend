@@ -1,3 +1,4 @@
+
 import axios from "axios";
 
 const api = axios.create({
@@ -8,14 +9,26 @@ const api = axios.create({
   },
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+// Добавляем Correlation ID и JWT к каждому запросу
+api.interceptors.request.use(
+  (config) => {
+    // Correlation ID для связывания логов между микросервисами
+    config.headers = config.headers || {};
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+    if (!config.headers["X-Correlation-Id"]) {
+      config.headers["X-Correlation-Id"] = crypto.randomUUID();
+    }
 
-  return config;
-});
+    // JWT из localStorage
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default api;
